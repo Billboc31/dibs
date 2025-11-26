@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       const checkAuth = async () => {
         try {
           // Récupérer la session active pour cet email
-          const { data: { users }, error } = await supabase.auth.admin.listUsers()
+          const { data, error } = await supabase.auth.admin.listUsers()
           
           if (error) {
             send({
@@ -45,8 +45,19 @@ export async function GET(request: NextRequest) {
             return
           }
 
+          // Vérifier que nous avons des utilisateurs
+          if (!data || !data.users) {
+            send({
+              status: 'waiting',
+              message: 'Aucun utilisateur trouvé',
+              email: email,
+              timestamp: new Date().toISOString()
+            })
+            return
+          }
+
           // Chercher l'utilisateur par email
-          const user = users.find(u => u.email === email)
+          const user = data.users.find((u: any) => u.email === email)
           
           if (user && user.last_sign_in_at) {
             const lastSignIn = new Date(user.last_sign_in_at)
