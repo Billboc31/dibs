@@ -159,12 +159,133 @@ Pour obtenir ce token, l'app mobile doit :
     },
     security: [{ BearerAuth: [] }],
     paths: {
+      '/api/auth/magic-link': {
+        post: {
+          tags: ['Auth'],
+          summary: '✨ P0 - Authentification Magic Link',
+          description: '**CRITIQUE** - Envoie un Magic Link par email pour l\'authentification sans mot de passe.',
+          'x-priority': 'P0',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['email'],
+                  properties: {
+                    email: { type: 'string', format: 'email', example: 'user@example.com' },
+                    redirectTo: { type: 'string', example: 'dibs://auth/callback' }
+                  }
+                },
+                example: {
+                  email: 'user@example.com',
+                  redirectTo: 'dibs://auth/callback'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Magic Link envoyé',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          email: { type: 'string' },
+                          message: { type: 'string' },
+                          message_id: { type: 'string', nullable: true },
+                          redirect_to: { type: 'string' }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      email: 'user@example.com',
+                      message: 'Magic Link envoyé ! Vérifiez votre boîte email.',
+                      message_id: 'msg_123456',
+                      redirect_to: 'dibs://auth/callback'
+                    }
+                  }
+                }
+              }
+            },
+            400: { description: 'Email manquant ou invalide', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }
+          }
+        },
+        get: {
+          tags: ['Auth'],
+          summary: '🔗 P0 - Callback Magic Link',
+          description: '**CRITIQUE** - Vérifie le token du Magic Link et authentifie l\'utilisateur.',
+          'x-priority': 'P0',
+          parameters: [
+            {
+              name: 'token_hash',
+              in: 'query',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Token hash du Magic Link'
+            },
+            {
+              name: 'type',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', enum: ['magiclink'] },
+              description: 'Type de token (doit être "magiclink")'
+            },
+            {
+              name: 'next',
+              in: 'query',
+              schema: { type: 'string', default: '/home' },
+              description: 'URL de redirection après authentification'
+            }
+          ],
+          responses: {
+            200: {
+              description: 'Magic Link vérifié avec succès',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          user: { $ref: '#/components/schemas/User' },
+                          session: {
+                            type: 'object',
+                            properties: {
+                              access_token: { type: 'string' },
+                              refresh_token: { type: 'string' },
+                              expires_at: { type: 'integer' },
+                              expires_in: { type: 'integer' }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            302: { description: 'Redirection vers l\'app mobile ou page suivante' },
+            400: { description: 'Token invalide ou expiré', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }
+          }
+        }
+      },
       '/api/auth/login': {
         post: {
           tags: ['Auth'],
-          summary: '🔐 P0 - Connexion email/password',
-          description: '**CRITIQUE** - Authentifie un utilisateur avec email et mot de passe.',
-          'x-priority': 'P0',
+          summary: '🔐 P2 - Connexion email/password (Legacy)',
+          description: 'Authentifie un utilisateur avec email et mot de passe. **Utiliser Magic Link de préférence.**',
+          'x-priority': 'P2',
           requestBody: {
             required: true,
             content: {
@@ -241,9 +362,9 @@ Pour obtenir ce token, l'app mobile doit :
       '/api/auth/register': {
         post: {
           tags: ['Auth'],
-          summary: '📝 P0 - Inscription utilisateur',
-          description: '**CRITIQUE** - Crée un nouveau compte utilisateur.',
-          'x-priority': 'P0',
+          summary: '📝 P2 - Inscription utilisateur (Legacy)',
+          description: 'Crée un nouveau compte utilisateur. **Utiliser Magic Link de préférence.**',
+          'x-priority': 'P2',
           requestBody: {
             required: true,
             content: {
@@ -320,9 +441,9 @@ Pour obtenir ce token, l'app mobile doit :
       '/api/auth/oauth/google': {
         post: {
           tags: ['Auth'],
-          summary: '🔐 P1 - OAuth Google',
-          description: 'Initie l\'authentification OAuth avec Google.',
-          'x-priority': 'P1',
+          summary: '🔐 P2 - OAuth Google (Legacy)',
+          description: 'Initie l\'authentification OAuth avec Google. **Utiliser Magic Link de préférence.**',
+          'x-priority': 'P2',
           requestBody: {
             required: false,
             content: {
@@ -376,9 +497,9 @@ Pour obtenir ce token, l'app mobile doit :
       '/api/auth/oauth/apple': {
         post: {
           tags: ['Auth'],
-          summary: '🍎 P1 - OAuth Apple',
-          description: 'Initie l\'authentification OAuth avec Apple.',
-          'x-priority': 'P1',
+          summary: '🍎 P2 - OAuth Apple (Legacy)',
+          description: 'Initie l\'authentification OAuth avec Apple. **Utiliser Magic Link de préférence.**',
+          'x-priority': 'P2',
           requestBody: {
             required: false,
             content: {
