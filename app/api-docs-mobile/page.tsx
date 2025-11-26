@@ -154,8 +154,19 @@ export default function ApiDocsMobilePage() {
         'Content-Type': 'application/json'
       }
 
-      if (endpoint.auth && testToken) {
+      // Vérifier si l'endpoint nécessite une authentification
+      if (endpoint.auth) {
+        if (!testToken) {
+          setTestResult({
+            status: 400,
+            statusText: 'Error',
+            data: { error: 'Token Bearer requis pour cet endpoint. Configurez-le dans la section "Token Bearer Global" en haut de la page.' }
+          })
+          setTestLoading(false)
+          return
+        }
         headers['Authorization'] = `Bearer ${testToken}`
+        console.log('🔑 Token ajouté aux headers:', testToken.substring(0, 20) + '...')
       }
 
       const options: RequestInit = {
@@ -167,8 +178,22 @@ export default function ApiDocsMobilePage() {
         options.body = testBody
       }
 
+      console.log('🚀 Envoi requête:', {
+        url,
+        method: endpoint.method,
+        headers,
+        hasAuth: endpoint.auth,
+        hasToken: !!testToken
+      })
+
       const response = await fetch(url, options)
       const data = await response.json()
+
+      console.log('📥 Réponse reçue:', {
+        status: response.status,
+        ok: response.ok,
+        data
+      })
 
       setTestResult({
         status: response.status,
@@ -941,6 +966,20 @@ ${endpoint.auth ? `  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\\n` : ''}  -H "
                                 {testResult.status} {testResult.statusText}
                               </span>
                             </div>
+                            
+                            {/* Afficher les infos de debug */}
+                            {endpoint.auth && (
+                              <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded">
+                                <p className="text-xs text-blue-700 font-medium">Debug Info:</p>
+                                <p className="text-xs text-blue-600">
+                                  Token utilisé: {testToken ? `${testToken.substring(0, 20)}...` : 'Aucun'}
+                                </p>
+                                <p className="text-xs text-blue-600">
+                                  Header Authorization: {testToken ? '✅ Ajouté' : '❌ Manquant'}
+                                </p>
+                              </div>
+                            )}
+                            
                             <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto max-h-64">
                               {JSON.stringify(testResult.data, null, 2)}
                             </pre>
