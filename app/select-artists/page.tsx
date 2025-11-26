@@ -190,6 +190,10 @@ export default function SelectArtistsPage() {
         name: ua.artists.name,
         spotify_id: ua.artists.spotify_id,
         image_url: ua.artists.image_url,
+        apple_music_id: ua.artists.apple_music_id,
+        deezer_id: ua.artists.deezer_id,
+        created_at: ua.artists.created_at,
+        updated_at: ua.artists.updated_at,
         listening_minutes: ua.last_listening_minutes,
         rank: `${ua.fanitude_points} points`,
       }))
