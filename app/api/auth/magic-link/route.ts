@@ -21,11 +21,17 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Envoyer le Magic Link avec Supabase (sans redirection compliquée)
+    // URL de redirection vers notre page de callback
+    const redirectTo = process.env.NEXT_PUBLIC_BASE_URL 
+      ? `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`
+      : 'https://dibs-poc0.vercel.app/auth/callback'
+
+    // Envoyer le Magic Link avec redirection vers la page de callback
     const { data, error } = await supabase.auth.signInWithOtp({
       email: email,
       options: {
         shouldCreateUser: true, // Créer l'utilisateur s'il n'existe pas
+        emailRedirectTo: redirectTo, // Rediriger vers notre page de callback
       }
     })
 
@@ -54,7 +60,8 @@ export async function POST(request: NextRequest) {
         email: email,
         message: 'Magic Link envoyé ! Cliquez sur le lien dans votre email pour vous connecter.',
         message_id: data?.messageId || null,
-        instructions: 'L\'utilisateur doit cliquer sur le lien dans l\'email. Supabase gérera automatiquement l\'authentification.'
+        redirect_to: redirectTo,
+        instructions: 'L\'utilisateur doit cliquer sur le lien dans l\'email. Il sera redirigé vers une page de callback qui déclenchera l\'événement WebSocket Supabase dans l\'app mobile.'
       }
     })
 

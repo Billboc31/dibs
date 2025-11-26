@@ -28,18 +28,24 @@ const response = await fetch('/api/auth/magic-link', {
 \`\`\`
 
 ### 2. L'utilisateur clique sur le lien dans son email
-- Le lien ouvre une page web qui confirme l'authentification
-- **Pas de deep links compliqués !**
-- L'utilisateur revient dans l'app et utilise Supabase directement
+- Le lien ouvre une page de callback : \`https://dibs-poc0.vercel.app/auth/callback\`
+- La page vérifie automatiquement le Magic Link
+- L'authentification Supabase est établie
+- **L'événement \`SIGNED_IN\` est déclenché dans l'app mobile !**
 
-### 3. Récupérer la session dans l'app mobile
+### 3. L'app mobile reçoit l'événement automatiquement
 \`\`\`javascript
-// Dans l'app mobile après que l'utilisateur ait cliqué sur le lien
-const { data: { session } } = await supabase.auth.getSession()
-if (session) {
-  // Utilisateur connecté !
-  const token = session.access_token
-}
+// Dans l'app mobile - L'événement se déclenche automatiquement !
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN' && session) {
+    // L'utilisateur vient de se connecter via Magic Link !
+    const token = session.access_token
+    console.log('✅ Connexion automatique détectée !', token)
+    
+    // Redirection automatique vers l'écran principal
+    navigation.navigate('Home')
+  }
+})
 \`\`\`
 
 ### 4. Écouter la connexion en temps réel (WebSocket)
@@ -357,7 +363,8 @@ const checkAuthStatus = async () => {
                           message: { type: 'string', example: 'Magic Link envoyé ! Cliquez sur le lien dans votre email pour vous connecter.' },
                           email: { type: 'string', example: 'user@example.com' },
                           message_id: { type: 'string', nullable: true, example: 'msg_123456' },
-                          instructions: { type: 'string', example: 'L\'utilisateur doit cliquer sur le lien dans l\'email. Supabase gérera automatiquement l\'authentification.' }
+                          redirect_to: { type: 'string', example: 'https://dibs-poc0.vercel.app/auth/callback' },
+                          instructions: { type: 'string', example: 'L\'utilisateur doit cliquer sur le lien dans l\'email. Il sera redirigé vers une page de callback qui déclenchera l\'événement WebSocket Supabase dans l\'app mobile.' }
                         }
                       }
                     }
@@ -652,6 +659,19 @@ const LoginScreen = ({ navigation }) => {
 - ✅ **Compatible mobile** - Fonctionne avec EventSource
 
 ## 🚀 Utilisation avec Supabase (RECOMMANDÉ)
+
+## 🔄 Flow complet Magic Link + WebSocket Supabase
+
+\`\`\`
+1. App Mobile → POST /api/auth/magic-link (email)
+2. Backend → Supabase → Envoie email Magic Link
+3. Utilisateur → Clique sur le lien dans l'email
+4. Navigateur → Ouvre https://dibs-poc0.vercel.app/auth/callback
+5. Page callback → Vérifie le Magic Link avec Supabase
+6. Supabase → Établit la session utilisateur
+7. App Mobile → Reçoit l'événement SIGNED_IN automatiquement !
+8. App Mobile → Redirige vers l'écran principal
+\`\`\`
 
 ## 🚀 Utilisation avec Supabase (RECOMMANDÉ)
 
