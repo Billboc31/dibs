@@ -1,0 +1,55 @@
+<svg width="300" height="300" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Crown -->
+  <g transform="translate(150, 80)">
+    <!-- Crown base -->
+    <ellipse cx="0" cy="50" rx="60" ry="8" fill="#FDB913"/>
+    <rect x="-55" y="40" width="110" height="15" rx="2" fill="#FDB913"/>
+    
+    <!-- Crown peaks -->
+    <path d="M -55 40 L -45 10 L -25 25 L 0 0 L 25 25 L 45 10 L 55 40 Z" fill="#FDB913"/>
+    
+    <!-- Musical notes -->
+    <!-- Left note -->
+    <g transform="translate(-48, 5)">
+      <circle cx="0" cy="0" r="4" fill="#FDB913"/>
+      <rect x="3" y="-15" width="2.5" height="15" fill="#FDB913"/>
+    </g>
+    
+    <!-- Left-center note (double) -->
+    <g transform="translate(-28, 20)">
+      <circle cx="0" cy="0" r="3.5" fill="#FDB913"/>
+      <circle cx="7" cy="-2" r="3.5" fill="#FDB913"/>
+      <line x1="3.5" y1="0" x2="3.5" y2="-12" stroke="#FDB913" stroke-width="2.5"/>
+      <line x1="10.5" y1="-2" x2="10.5" y2="-12" stroke="#FDB913" stroke-width="2.5"/>
+      <line x1="3.5" y1="-12" x2="10.5" y2="-12" stroke="#FDB913" stroke-width="2.5"/>
+    </g>
+    
+    <!-- Center note (tallest) -->
+    <g transform="translate(-3, -5)">
+      <circle cx="0" cy="0" r="4.5" fill="#FDB913"/>
+      <rect x="4" y="-20" width="3" height="20" fill="#FDB913"/>
+      <circle cx="7" cy="-18" r="3" fill="#FDB913"/>
+    </g>
+    
+    <!-- Right-center note -->
+    <g transform="translate(23, 20)">
+      <circle cx="0" cy="0" r="3.5" fill="#FDB913"/>
+      <rect x="3.5" y="-12" width="2.5" height="12" fill="#FDB913"/>
+    </g>
+    
+    <!-- Right note (double) -->
+    <g transform="translate(41, 5)">
+      <circle cx="0" cy="0" r="4" fill="#FDB913"/>
+      <circle cx="7" cy="-2" r="4" fill="#FDB913"/>
+      <line x1="4" y1="0" x2="4" y2="-13" stroke="#FDB913" stroke-width="2.5"/>
+      <line x1="11" y1="-2" x2="11" y2="-13" stroke="#FDB913" stroke-width="2.5"/>
+      <line x1="4" y1="-13" x2="11" y2="-13" stroke="#FDB913" stroke-width="2.5"/>
+    </g>
+  </g>
+  
+  <!-- DIBS Text -->
+  <text x="150" y="200" font-family="Arial Black, sans-serif" font-size="72" font-weight="900" text-anchor="middle" fill="#000000">D!BS</text>
+</svg>
+
+
+
