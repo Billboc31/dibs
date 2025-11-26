@@ -4,11 +4,13 @@ const options: any = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'DIBS Mobile API - Magic Link Auth',
+      title: 'DIBS Mobile API',
       version: '1.0.0',
-      description: `📱 **API d'authentification Magic Link pour l'application mobile DIBS**
+      description: `📱 **API complète pour l'application mobile DIBS**
 
-Cette API utilise uniquement l'authentification par Magic Link (lien de connexion par email) **SANS deep links compliqués**.
+Cette API est spécifiquement conçue pour l'application mobile. Tous les endpoints nécessitent une authentification via Supabase.
+
+⚠️ **Important:** L'app mobile ne doit PAS se connecter directement à Supabase. Tous les appels doivent passer par ces endpoints API.
 
 ## 🔐 Authentication Magic Link (Simple)
 
@@ -66,6 +68,12 @@ const headers = {
   "error": "Message d'erreur"
 }
 \`\`\`
+
+## 🎯 Priorités
+
+- **P0** = Critique (app ne peut pas fonctionner sans)
+- **P1** = Important (features principales)
+- **P2** = Nice to have
 
 ## 🚀 Exemple complet React Native/Expo (SIMPLE)
 
@@ -132,48 +140,6 @@ const checkAuthStatus = async () => {
     return null
   }
 }
-
-// 4. Utilisation dans un composant
-const LoginScreen = () => {
-  const [email, setEmail] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  
-  const handleLogin = async () => {
-    setIsLoading(true)
-    await loginWithMagicLink(email)
-    setIsLoading(false)
-  }
-  
-  const handleCheckAuth = async () => {
-    const authData = await checkAuthStatus()
-    if (authData) {
-      // Rediriger vers l'écran principal
-      navigation.navigate('Home')
-    } else {
-      Alert.alert('Pas encore connecté', 'Cliquez d\'abord sur le lien dans votre email.')
-    }
-  }
-  
-  return (
-    <View>
-      <TextInput 
-        value={email} 
-        onChangeText={setEmail}
-        placeholder="Votre email"
-        keyboardType="email-address"
-      />
-      <Button 
-        title="Envoyer Magic Link" 
-        onPress={handleLogin}
-        disabled={isLoading}
-      />
-      <Button 
-        title="Vérifier si connecté" 
-        onPress={handleCheckAuth}
-      />
-    </View>
-  )
-}
 \`\`\`
 `,
       contact: {
@@ -222,6 +188,59 @@ const LoginScreen = () => {
             created_at: { type: 'string', format: 'date-time', example: '2025-01-15T10:30:00Z' },
             updated_at: { type: 'string', format: 'date-time', example: '2025-01-15T10:30:00Z' }
           }
+        },
+        Artist: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440001' },
+            name: { type: 'string', example: 'Lady Gaga' },
+            spotify_id: { type: 'string', nullable: true, example: '1HY2Jd0NmPuamShAr6KMms' },
+            apple_music_id: { type: 'string', nullable: true, example: '277293880' },
+            deezer_id: { type: 'string', nullable: true, example: '12246' },
+            image_url: { type: 'string', nullable: true, example: 'https://example.com/artist.jpg' },
+            created_at: { type: 'string', format: 'date-time', example: '2025-01-15T10:30:00Z' },
+            updated_at: { type: 'string', format: 'date-time', example: '2025-01-15T10:30:00Z' }
+          }
+        },
+        UserArtist: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            user_id: { type: 'string', format: 'uuid' },
+            artist_id: { type: 'string', format: 'uuid' },
+            fanitude_points: { type: 'integer', example: 1250 },
+            listening_minutes: { type: 'integer', example: 625 },
+            created_at: { type: 'string', format: 'date-time' },
+            updated_at: { type: 'string', format: 'date-time' },
+            artist: { $ref: '#/components/schemas/Artist' }
+          }
+        },
+        Event: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            title: { type: 'string', example: 'Lady Gaga - Chromatica Ball Tour' },
+            artist_id: { type: 'string', format: 'uuid' },
+            event_date: { type: 'string', format: 'date-time', example: '2025-07-15T20:00:00Z' },
+            venue: { type: 'string', example: 'AccorHotels Arena' },
+            city: { type: 'string', example: 'Paris' },
+            country: { type: 'string', example: 'France' },
+            image_url: { type: 'string', nullable: true },
+            ticket_url: { type: 'string', nullable: true },
+            created_at: { type: 'string', format: 'date-time' }
+          }
+        },
+        QRScan: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            user_id: { type: 'string', format: 'uuid' },
+            qr_code: { type: 'string', example: 'ALBUM_MAYHEM_2024' },
+            artist_id: { type: 'string', format: 'uuid' },
+            points_earned: { type: 'integer', example: 500 },
+            scanned_at: { type: 'string', format: 'date-time' },
+            artist: { $ref: '#/components/schemas/Artist' }
+          }
         }
       }
     },
@@ -231,6 +250,7 @@ const LoginScreen = () => {
       }
     ],
     paths: {
+      // === AUTHENTICATION ===
       '/api/auth/magic-link': {
         post: {
           tags: ['Auth'],
@@ -279,15 +299,6 @@ const LoginScreen = () => {
                         }
                       }
                     }
-                  },
-                  example: {
-                    success: true,
-                    data: {
-                      message: 'Magic Link envoyé ! Cliquez sur le lien dans votre email pour vous connecter.',
-                      email: 'user@example.com',
-                      message_id: 'msg_123456',
-                      instructions: 'L\'utilisateur doit cliquer sur le lien dans l\'email. Supabase gérera automatiquement l\'authentification.'
-                    }
                   }
                 }
               }
@@ -296,23 +307,7 @@ const LoginScreen = () => {
               description: 'Email manquant ou invalide',
               content: {
                 'application/json': {
-                  schema: { $ref: '#/components/schemas/Error' },
-                  example: {
-                    success: false,
-                    error: 'Email is required'
-                  }
-                }
-              }
-            },
-            500: {
-              description: 'Erreur interne du serveur',
-              content: {
-                'application/json': {
-                  schema: { $ref: '#/components/schemas/Error' },
-                  example: {
-                    success: false,
-                    error: 'Failed to send magic link'
-                  }
+                  schema: { $ref: '#/components/schemas/Error' }
                 }
               }
             }
@@ -341,120 +336,12 @@ const LoginScreen = () => {
                         }
                       }
                     }
-                  },
-                  example: {
-                    success: true,
-                    data: {
-                      user: {
-                        id: '550e8400-e29b-41d4-a716-446655440000',
-                        email: 'user@example.com',
-                        display_name: 'John Doe',
-                        avatar_url: null,
-                        city: 'Paris',
-                        country: 'France',
-                        created_at: '2025-01-15T10:30:00Z'
-                      }
-                    }
                   }
                 }
               }
             },
             401: {
               description: 'Non authentifié',
-              content: {
-                'application/json': {
-                  schema: { $ref: '#/components/schemas/Error' }
-                }
-              }
-            }
-          }
-        }
-      },
-      '/api/auth/verify-otp': {
-        post: {
-          tags: ['Auth'],
-          summary: '🔢 P2 - Vérifier un code OTP (Optionnel)',
-          description: '**OPTIONNEL** - Vérifie un code OTP reçu par email. Alternative si les Magic Links ne fonctionnent pas.',
-          'x-priority': 'P2',
-          security: [], // Pas d'auth requise pour vérifier un OTP
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['email', 'token'],
-                  properties: {
-                    email: { 
-                      type: 'string', 
-                      format: 'email', 
-                      example: 'user@example.com',
-                      description: 'Email de l\'utilisateur'
-                    },
-                    token: { 
-                      type: 'string', 
-                      example: '123456',
-                      description: 'Code OTP reçu par email'
-                    }
-                  }
-                },
-                example: {
-                  email: 'user@example.com',
-                  token: '123456'
-                }
-              }
-            }
-          },
-          responses: {
-            200: {
-              description: 'OTP vérifié avec succès',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      success: { type: 'boolean', example: true },
-                      data: {
-                        type: 'object',
-                        properties: {
-                          user: { $ref: '#/components/schemas/User' },
-                          session: {
-                            type: 'object',
-                            properties: {
-                              access_token: { type: 'string' },
-                              refresh_token: { type: 'string' },
-                              expires_at: { type: 'integer' },
-                              expires_in: { type: 'integer' }
-                            }
-                          },
-                          message: { type: 'string', example: 'Connexion réussie !' }
-                        }
-                      }
-                    }
-                  },
-                  example: {
-                    success: true,
-                    data: {
-                      user: {
-                        id: '550e8400-e29b-41d4-a716-446655440000',
-                        email: 'user@example.com',
-                        display_name: null,
-                        created_at: '2025-01-15T10:30:00Z'
-                      },
-                      session: {
-                        access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                        refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                        expires_at: 1737894600,
-                        expires_in: 3600
-                      },
-                      message: 'Connexion réussie !'
-                    }
-                  }
-                }
-              }
-            },
-            400: {
-              description: 'Code OTP invalide ou expiré',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/Error' }
@@ -483,6 +370,823 @@ const LoginScreen = () => {
                         type: 'object',
                         properties: {
                           message: { type: 'string', example: 'Logged out successfully' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+
+      // === USER PROFILE ===
+      '/api/user/profile': {
+        get: {
+          tags: ['User'],
+          summary: '👤 P0 - Obtenir le profil utilisateur',
+          description: '**CRITIQUE** - Récupère le profil complet de l\'utilisateur connecté.',
+          'x-priority': 'P0',
+          responses: {
+            200: {
+              description: 'Profil utilisateur',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          user: { $ref: '#/components/schemas/User' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        put: {
+          tags: ['User'],
+          summary: '✏️ P1 - Mettre à jour le profil',
+          description: 'Met à jour les informations du profil utilisateur.',
+          'x-priority': 'P1',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    display_name: { type: 'string', example: 'John Doe' },
+                    avatar_url: { type: 'string', nullable: true, example: 'https://example.com/avatar.jpg' }
+                  }
+                },
+                example: {
+                  display_name: 'John Doe',
+                  avatar_url: 'https://example.com/avatar.jpg'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Profil mis à jour',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          user: { $ref: '#/components/schemas/User' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/user/location': {
+        put: {
+          tags: ['User'],
+          summary: '📍 P1 - Mettre à jour la localisation',
+          description: 'Met à jour la localisation de l\'utilisateur.',
+          'x-priority': 'P1',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['city', 'country'],
+                  properties: {
+                    city: { type: 'string', example: 'Paris' },
+                    country: { type: 'string', example: 'France' },
+                    location_lat: { type: 'number', example: 48.8566 },
+                    location_lng: { type: 'number', example: 2.3522 }
+                  }
+                },
+                example: {
+                  city: 'Paris',
+                  country: 'France',
+                  location_lat: 48.8566,
+                  location_lng: 2.3522
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Localisation mise à jour',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          message: { type: 'string', example: 'Location updated successfully' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/user/stats': {
+        get: {
+          tags: ['User'],
+          summary: '📊 P0 - Statistiques utilisateur',
+          description: '**CRITIQUE** - Récupère les statistiques de l\'utilisateur (artistes, points, événements, scans).',
+          'x-priority': 'P0',
+          responses: {
+            200: {
+              description: 'Statistiques utilisateur',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          totalArtists: { type: 'integer', example: 5 },
+                          totalPoints: { type: 'integer', example: 2750 },
+                          upcomingEvents: { type: 'integer', example: 3 },
+                          qrScans: { type: 'integer', example: 12 }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+
+      // === ARTISTS ===
+      '/api/user/artists': {
+        get: {
+          tags: ['Artists'],
+          summary: '🎵 P0 - Artistes de l\'utilisateur',
+          description: '**CRITIQUE** - Récupère la liste des artistes suivis par l\'utilisateur avec pagination.',
+          'x-priority': 'P0',
+          parameters: [
+            {
+              name: 'page',
+              in: 'query',
+              description: 'Numéro de page (commence à 1)',
+              required: false,
+              schema: { type: 'integer', default: 1, example: 1 }
+            },
+            {
+              name: 'limit',
+              in: 'query',
+              description: 'Nombre d\'artistes par page',
+              required: false,
+              schema: { type: 'integer', default: 10, example: 10 }
+            }
+          ],
+          responses: {
+            200: {
+              description: 'Liste des artistes',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          artists: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/UserArtist' }
+                          },
+                          pagination: {
+                            type: 'object',
+                            properties: {
+                              page: { type: 'integer', example: 1 },
+                              limit: { type: 'integer', example: 10 },
+                              total: { type: 'integer', example: 25 },
+                              hasMore: { type: 'boolean', example: true }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/user/artists/save': {
+        post: {
+          tags: ['Artists'],
+          summary: '💾 P0 - Sauvegarder les artistes sélectionnés',
+          description: '**CRITIQUE** - Sauvegarde la liste des artistes sélectionnés par l\'utilisateur.',
+          'x-priority': 'P0',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['artistIds'],
+                  properties: {
+                    artistIds: {
+                      type: 'array',
+                      items: { type: 'string', format: 'uuid' },
+                      example: ['550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440002']
+                    }
+                  }
+                },
+                example: {
+                  artistIds: ['550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440002']
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Artistes sauvegardés',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          message: { type: 'string', example: 'Artists saved successfully' },
+                          count: { type: 'integer', example: 2 }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/user/artists/top': {
+        get: {
+          tags: ['Artists'],
+          summary: '🏆 P0 - Top 3 artistes',
+          description: '**CRITIQUE** - Récupère les 3 artistes préférés de l\'utilisateur (plus de points).',
+          'x-priority': 'P0',
+          responses: {
+            200: {
+              description: 'Top 3 artistes',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          topArtists: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/UserArtist' },
+                            maxItems: 3
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/artists/{id}': {
+        get: {
+          tags: ['Artists'],
+          summary: '🎤 P1 - Détails d\'un artiste',
+          description: 'Récupère les détails d\'un artiste spécifique.',
+          'x-priority': 'P1',
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              description: 'ID de l\'artiste',
+              schema: { type: 'string', format: 'uuid' }
+            }
+          ],
+          responses: {
+            200: {
+              description: 'Détails de l\'artiste',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          artist: { $ref: '#/components/schemas/Artist' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/artists/{id}/leaderboard': {
+        get: {
+          tags: ['Artists'],
+          summary: '🏅 P1 - Classement pour un artiste',
+          description: 'Récupère le classement des fans pour un artiste spécifique.',
+          'x-priority': 'P1',
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              description: 'ID de l\'artiste',
+              schema: { type: 'string', format: 'uuid' }
+            }
+          ],
+          responses: {
+            200: {
+              description: 'Classement des fans',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          artist: { $ref: '#/components/schemas/Artist' },
+                          leaderboard: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                user_id: { type: 'string', format: 'uuid' },
+                                display_name: { type: 'string', example: 'John Doe' },
+                                fanitude_points: { type: 'integer', example: 1250 },
+                                world_position: { type: 'integer', example: 1 },
+                                country_position: { type: 'integer', example: 1 },
+                                country: { type: 'string', example: 'France' }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+
+      // === QR CODES ===
+      '/api/qr/scan': {
+        post: {
+          tags: ['QR'],
+          summary: '📱 P0 - Scanner un QR code',
+          description: '**CRITIQUE** - Scanne un QR code et attribue des points à l\'utilisateur.',
+          'x-priority': 'P0',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['qrCode'],
+                  properties: {
+                    qrCode: { type: 'string', example: 'ALBUM_MAYHEM_2024' }
+                  }
+                },
+                example: {
+                  qrCode: 'ALBUM_MAYHEM_2024'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'QR code scanné avec succès',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          message: { type: 'string', example: 'QR code scanned successfully' },
+                          pointsEarned: { type: 'integer', example: 500 },
+                          artist: { $ref: '#/components/schemas/Artist' },
+                          totalPoints: { type: 'integer', example: 1750 }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'QR code invalide ou déjà scanné',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Error' }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/qr/history': {
+        get: {
+          tags: ['QR'],
+          summary: '📋 P1 - Historique des scans QR',
+          description: 'Récupère l\'historique des QR codes scannés par l\'utilisateur.',
+          'x-priority': 'P1',
+          responses: {
+            200: {
+              description: 'Historique des scans',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          scans: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/QRScan' }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/qr/validate/{code}': {
+        get: {
+          tags: ['QR'],
+          summary: '✅ P1 - Valider un QR code',
+          description: 'Vérifie si un QR code est valide avant de le scanner.',
+          'x-priority': 'P1',
+          parameters: [
+            {
+              name: 'code',
+              in: 'path',
+              required: true,
+              description: 'Code QR à valider',
+              schema: { type: 'string' }
+            }
+          ],
+          responses: {
+            200: {
+              description: 'QR code valide',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          valid: { type: 'boolean', example: true },
+                          points: { type: 'integer', example: 500 },
+                          artist: { $ref: '#/components/schemas/Artist' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+
+      // === EVENTS ===
+      '/api/events/upcoming': {
+        get: {
+          tags: ['Events'],
+          summary: '🎪 P1 - Événements à venir',
+          description: 'Récupère la liste des concerts et événements à venir.',
+          'x-priority': 'P1',
+          responses: {
+            200: {
+              description: 'Liste des événements',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          events: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/Event' }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/events/{id}': {
+        get: {
+          tags: ['Events'],
+          summary: '🎫 P1 - Détails d\'un événement',
+          description: 'Récupère les détails d\'un événement spécifique.',
+          'x-priority': 'P1',
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              description: 'ID de l\'événement',
+              schema: { type: 'string', format: 'uuid' }
+            }
+          ],
+          responses: {
+            200: {
+              description: 'Détails de l\'événement',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          event: { $ref: '#/components/schemas/Event' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/events/{id}/interested': {
+        post: {
+          tags: ['Events'],
+          summary: '❤️ P2 - Marquer intérêt pour un événement',
+          description: 'Marque l\'utilisateur comme intéressé par un événement.',
+          'x-priority': 'P2',
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              description: 'ID de l\'événement',
+              schema: { type: 'string', format: 'uuid' }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['status'],
+                  properties: {
+                    status: { 
+                      type: 'string', 
+                      enum: ['interested', 'going', 'not_interested'],
+                      example: 'interested' 
+                    }
+                  }
+                },
+                example: {
+                  status: 'interested'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Statut mis à jour',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          message: { type: 'string', example: 'Interest status updated' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/user/events': {
+        get: {
+          tags: ['Events'],
+          summary: '📅 P1 - Événements de l\'utilisateur',
+          description: 'Récupère les événements auxquels l\'utilisateur s\'est montré intéressé.',
+          'x-priority': 'P1',
+          responses: {
+            200: {
+              description: 'Événements de l\'utilisateur',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          events: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                status: { type: 'string', example: 'interested' },
+                                event: { $ref: '#/components/schemas/Event' }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+
+      // === PLATFORMS ===
+      '/api/platforms': {
+        get: {
+          tags: ['Platforms'],
+          summary: '🎵 P2 - Plateformes de streaming',
+          description: 'Récupère la liste des plateformes de streaming disponibles.',
+          'x-priority': 'P2',
+          responses: {
+            200: {
+              description: 'Liste des plateformes',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          platforms: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                id: { type: 'string', format: 'uuid' },
+                                name: { type: 'string', example: 'Spotify' },
+                                logo_url: { type: 'string', example: 'https://example.com/spotify-logo.png' },
+                                is_active: { type: 'boolean', example: true }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/user/platforms': {
+        get: {
+          tags: ['Platforms'],
+          summary: '🔗 P2 - Plateformes connectées',
+          description: 'Récupère les plateformes de streaming connectées par l\'utilisateur.',
+          'x-priority': 'P2',
+          responses: {
+            200: {
+              description: 'Plateformes connectées',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          connectedPlatforms: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                platform_name: { type: 'string', example: 'Spotify' },
+                                connected_at: { type: 'string', format: 'date-time' }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        delete: {
+          tags: ['Platforms'],
+          summary: '🗑️ P2 - Déconnecter une plateforme',
+          description: 'Déconnecte une plateforme de streaming.',
+          'x-priority': 'P2',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['platformId'],
+                  properties: {
+                    platformId: { type: 'string', format: 'uuid' }
+                  }
+                },
+                example: {
+                  platformId: '550e8400-e29b-41d4-a716-446655440003'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Plateforme déconnectée',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          message: { type: 'string', example: 'Platform disconnected successfully' }
                         }
                       }
                     }
