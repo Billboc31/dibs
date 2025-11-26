@@ -22,6 +22,7 @@ export default function ApiDocsMobilePage() {
   const [testingEndpoint, setTestingEndpoint] = useState<string | null>(null)
   const [testToken, setTestToken] = useState('')
   const [testBody, setTestBody] = useState('{}')
+  const [testEmail, setTestEmail] = useState('')
   const [testResult, setTestResult] = useState<any>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [showOAuthDocs, setShowOAuthDocs] = useState(false)
@@ -54,6 +55,84 @@ export default function ApiDocsMobilePage() {
     setTestResult(null)
 
     try {
+      // Construire l'URL avec les paramètres query si nécessaire
+      let url = `${spec.servers[0].url}${endpoint.path}`
+      
+      // Pour le WebSocket complet, ajouter l'email comme paramètre
+      if (endpoint.path === '/api/auth/ws-complete' && testEmail) {
+        url += `?email=${encodeURIComponent(testEmail)}`
+      }
+
+      // Pour les WebSockets, utiliser EventSource au lieu de fetch
+      if (endpoint.path === '/api/auth/ws-complete') {
+        if (!testEmail) {
+          setTestResult({
+            status: 400,
+            statusText: 'Error',
+            data: { error: 'Email requis pour le WebSocket complet' }
+          })
+          setTestLoading(false)
+          return
+        }
+
+        // Créer EventSource pour le WebSocket
+        const eventSource = new EventSource(url)
+        const messages: any[] = []
+        
+        eventSource.onmessage = (event) => {
+          const data = JSON.parse(event.data)
+          messages.push(data)
+          
+          setTestResult({
+            status: 200,
+            statusText: 'WebSocket Messages',
+            data: {
+              messages: messages,
+              latest: data,
+              info: 'Messages WebSocket en temps réel. Le WebSocket se ferme automatiquement après authentification ou timeout.'
+            }
+          })
+
+          // Fermer automatiquement si authentifié ou erreur
+          if (data.status === 'authenticated' || data.status === 'error' || data.status === 'timeout') {
+            eventSource.close()
+            setTestLoading(false)
+          }
+        }
+
+        eventSource.onerror = () => {
+          eventSource.close()
+          setTestResult({
+            status: 0,
+            statusText: 'WebSocket Error',
+            data: { 
+              error: 'Erreur de connexion WebSocket',
+              messages: messages
+            }
+          })
+          setTestLoading(false)
+        }
+
+        // Timeout après 60 secondes
+        setTimeout(() => {
+          eventSource.close()
+          if (testLoading) {
+            setTestResult({
+              status: 408,
+              statusText: 'Timeout',
+              data: { 
+                error: 'Timeout WebSocket (60s)',
+                messages: messages
+              }
+            })
+            setTestLoading(false)
+          }
+        }, 60000)
+
+        return
+      }
+
+      // Pour les endpoints normaux (non-WebSocket)
       const headers: any = {
         'Content-Type': 'application/json'
       }
@@ -71,7 +150,7 @@ export default function ApiDocsMobilePage() {
         options.body = testBody
       }
 
-      const response = await fetch(`${spec.servers[0].url}${endpoint.path}`, options)
+      const response = await fetch(url, options)
       const data = await response.json()
 
       setTestResult({
@@ -575,6 +654,10 @@ function generateRandomString(length: number): string {
                             if (!isTesting && endpoint.requestBodyExample) {
                               setTestBody(JSON.stringify(endpoint.requestBodyExample, null, 2))
                             }
+                            // Préremplir l'email pour le WebSocket complet
+                            if (!isTesting && endpoint.path === '/api/auth/ws-complete') {
+                              setTestEmail('user@example.com')
+                            }
                             setTestingEndpoint(isTesting ? null : endpointKey)
                             setTestResult(null)
                           }}
@@ -644,6 +727,25 @@ ${endpoint.auth ? `  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\\n` : ''}  -H "
                       <div className="mt-4 pt-4 border-t border-gray-100 bg-gray-50 p-4 rounded-lg">
                         <h4 className="font-bold text-gray-900 mb-3 text-sm">🧪 Tester l'endpoint</h4>
                         
+                        {/* Champ email spécial pour WebSocket complet */}
+                        {endpoint.path === '/api/auth/ws-complete' && (
+                          <div className="mb-3">
+                            <label className="block text-xs text-gray-700 mb-1 font-medium">
+                              📧 Email (requis pour WebSocket):
+                            </label>
+                            <input
+                              type="email"
+                              value={testEmail}
+                              onChange={(e) => setTestEmail(e.target.value)}
+                              placeholder="user@example.com"
+                              className="w-full px-3 py-2 border border-gray-300 rounded text-xs"
+                            />
+                            <p className="mt-1 text-xs text-blue-600">
+                              ⚡ Le WebSocket enverra automatiquement un Magic Link à cet email
+                            </p>
+                          </div>
+                        )}
+                        
                         {endpoint.auth && (
                           <div className="mb-3">
                             <label className="block text-xs text-gray-700 mb-1 font-medium">
@@ -681,11 +783,33 @@ ${endpoint.auth ? `  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\\n` : ''}  -H "
 
                         <button
                           onClick={() => handleTestEndpoint(endpoint)}
-                          disabled={testLoading}
+                          disabled={testLoading || (endpoint.path === '/api/auth/ws-complete' && !testEmail)}
                           className="w-full px-4 py-2 bg-green-600 text-white rounded font-medium hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
-                          {testLoading ? '⏳ Envoi...' : `🚀 Envoyer ${endpoint.method} request`}
+                          {testLoading 
+                            ? (endpoint.path === '/api/auth/ws-complete' ? '⚡ WebSocket actif...' : '⏳ Envoi...')
+                            : endpoint.path === '/api/auth/ws-complete' 
+                              ? '🚀 Démarrer WebSocket Complet'
+                              : `🚀 Envoyer ${endpoint.method} request`
+                          }
                         </button>
+                        
+                        {/* Bouton d'arrêt pour WebSocket */}
+                        {testLoading && endpoint.path === '/api/auth/ws-complete' && (
+                          <button
+                            onClick={() => {
+                              setTestLoading(false)
+                              setTestResult({
+                                status: 0,
+                                statusText: 'Stopped',
+                                data: { message: 'WebSocket arrêté manuellement' }
+                              })
+                            }}
+                            className="w-full mt-2 px-4 py-2 bg-red-600 text-white rounded font-medium hover:bg-red-700"
+                          >
+                            🛑 Arrêter WebSocket
+                          </button>
+                        )}
 
                         {testResult && (
                           <div className="mt-4">
