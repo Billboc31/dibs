@@ -770,15 +770,23 @@ ${endpoint.auth ? `  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\\n` : ''}  -H "
                         {endpoint.path.includes('/ws') && endpoint.path !== '/api/auth/ws-complete' && (
                           <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
                             <p className="text-xs text-yellow-800 font-medium mb-2">
-                              ⚠️ WebSocket avec authentification
+                              ⚠️ WebSocket avec authentification Bearer
                             </p>
                             <p className="text-xs text-yellow-700 mb-2">
                               EventSource ne supporte pas les headers Authorization. 
-                              Le token sera passé dans l'URL : <code className="bg-yellow-100 px-1 rounded">?token=YOUR_TOKEN</code>
+                              Le Bearer token sera passé dans l'URL : <code className="bg-yellow-100 px-1 rounded">?token=YOUR_JWT_TOKEN</code>
                             </p>
                             {endpoint.auth && testToken && (
-                              <p className="text-xs text-green-700">
-                                ✅ Token sera ajouté automatiquement à l'URL
+                              <div className="text-xs text-green-700 space-y-1">
+                                <p>✅ Bearer token sera ajouté automatiquement à l'URL</p>
+                                <p className="font-mono bg-green-100 p-1 rounded">
+                                  URL finale: {spec.servers[0].url}{endpoint.path}?token={testToken.substring(0, 20)}...
+                                </p>
+                              </div>
+                            )}
+                            {endpoint.auth && !testToken && (
+                              <p className="text-xs text-red-700">
+                                ❌ Saisissez votre Bearer token ci-dessous pour tester ce WebSocket
                               </p>
                             )}
                           </div>

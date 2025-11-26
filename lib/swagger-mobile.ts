@@ -92,18 +92,45 @@ Il faut utiliser d'autres méthodes :
 
 #### 🎯 **Méthode 1 : Token dans l'URL (Recommandée)**
 \`\`\`javascript
-// Passer le token comme paramètre query
+// Passer le Bearer token comme paramètre query
 const token = await AsyncStorage.getItem('auth_token')
 const eventSource = new EventSource(
-  \`https://dibs-poc0.vercel.app/api/some-ws?token=\${token}\`
+  \`https://dibs-poc0.vercel.app/api/some-ws?token=\${encodeURIComponent(token)}\`
 )
+
+// Le serveur récupère le token avec :
+// const token = searchParams.get('token')
+// const user = await supabase.auth.getUser(token)
+\`\`\`
+
+#### 🎯 **Méthode 1b : Bearer token complet dans l'URL**
+\`\`\`javascript
+// Passer le Bearer token complet (avec "Bearer " prefix)
+const token = await AsyncStorage.getItem('auth_token')
+const eventSource = new EventSource(
+  \`https://dibs-poc0.vercel.app/api/some-ws?authorization=\${encodeURIComponent('Bearer ' + token)}\`
+)
+
+// Le serveur récupère avec :
+// const authHeader = searchParams.get('authorization') // "Bearer eyJhbG..."
+// const token = authHeader?.replace('Bearer ', '')
 \`\`\`
 
 #### 🎯 **Méthode 2 : WebSocket natif avec headers**
 \`\`\`javascript
-// Utiliser WebSocket natif au lieu d'EventSource
+// Utiliser WebSocket natif au lieu d'EventSource pour les vrais headers
 const token = await AsyncStorage.getItem('auth_token')
+
+// React Native
 const ws = new WebSocket('wss://dibs-poc0.vercel.app/api/some-ws', [], {
+  headers: {
+    'Authorization': \`Bearer \${token}\`
+  }
+})
+
+// Ou pour le web avec ws library
+import WebSocket from 'ws'
+const ws = new WebSocket('wss://dibs-poc0.vercel.app/api/some-ws', {
   headers: {
     'Authorization': \`Bearer \${token}\`
   }
@@ -113,6 +140,9 @@ ws.onmessage = (event) => {
   const data = JSON.parse(event.data)
   console.log('Message WebSocket:', data)
 }
+
+ws.onopen = () => console.log('WebSocket connecté avec auth')
+ws.onerror = (error) => console.error('Erreur WebSocket:', error)
 \`\`\`
 
 #### 🎯 **Méthode 3 : Authentification initiale**
@@ -139,10 +169,181 @@ const eventSource = new EventSource(
 - **Pas de méthode POST** (seulement GET)
 - **Pas de body** dans la requête
 
+### 🔧 **Exemples pratiques d'implémentation :**
+
+#### **Exemple 1 : WebSocket avec Bearer token (EventSource)**
+\`\`\`javascript
+// Fonction helper pour WebSocket authentifié
+const connectAuthenticatedWebSocket = async (endpoint, onMessage) => {
+  const token = await AsyncStorage.getItem('auth_token')
+  
+  if (!token) {
+    throw new Error('Token d\\'authentification manquant')
+  }
+  
+  // Passer le Bearer token dans l'URL
+  const url = \`https://dibs-poc0.vercel.app\${endpoint}?token=\${encodeURIComponent(token)}\`
+  
+  const eventSource = new EventSource(url)
+  
+  eventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data)
+    onMessage(data)
+  }
+  
+  eventSource.onerror = (error) => {
+    console.error('Erreur WebSocket:', error)
+    if (error.target.readyState === EventSource.CLOSED) {
+      console.log('WebSocket fermé')
+    }
+  }
+  
+  return eventSource
+}
+
+// Utilisation
+const ws = await connectAuthenticatedWebSocket('/api/user/notifications', (data) => {
+  console.log('Notification reçue:', data)
+})
+
+// Fermer la connexion
+ws.close()
+\`\`\`
+
+#### **Exemple 2 : WebSocket avec gestion d'erreur 401**
+\`\`\`javascript
+const connectWithTokenRefresh = async (endpoint, onMessage) => {
+  let token = await AsyncStorage.getItem('auth_token')
+  
+  const connect = () => {
+    const url = \`https://dibs-poc0.vercel.app\${endpoint}?token=\${encodeURIComponent(token)}\`
+    const eventSource = new EventSource(url)
+    
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      
+      // Gérer les erreurs d'authentification
+      if (data.error && data.error.includes('401')) {
+        console.log('Token expiré, tentative de refresh...')
+        eventSource.close()
+        refreshTokenAndReconnect()
+        return
+      }
+      
+      onMessage(data)
+    }
+    
+    return eventSource
+  }
+  
+  const refreshTokenAndReconnect = async () => {
+    try {
+      // Refresh du token via votre API
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: {
+          'Authorization': \`Bearer \${await AsyncStorage.getItem('refresh_token')}\`
+        }
+      })
+      
+      const { access_token } = await response.json()
+      await AsyncStorage.setItem('auth_token', access_token)
+      token = access_token
+      
+      // Reconnecter avec le nouveau token
+      return connect()
+    } catch (error) {
+      console.error('Erreur refresh token:', error)
+      // Rediriger vers login
+    }
+  }
+  
+  return connect()
+}
+\`\`\`
+
+#### **Exemple 3 : WebSocket React Native avec reconnexion automatique**
+\`\`\`javascript
+import { useEffect, useRef, useState } from 'react'
+
+const useAuthenticatedWebSocket = (endpoint) => {
+  const [isConnected, setIsConnected] = useState(false)
+  const [messages, setMessages] = useState([])
+  const eventSourceRef = useRef(null)
+  const reconnectTimeoutRef = useRef(null)
+  
+  const connect = async () => {
+    try {
+      const token = await AsyncStorage.getItem('auth_token')
+      if (!token) return
+      
+      const url = \`https://dibs-poc0.vercel.app\${endpoint}?token=\${encodeURIComponent(token)}\`
+      const eventSource = new EventSource(url)
+      
+      eventSource.onopen = () => {
+        console.log('WebSocket connecté')
+        setIsConnected(true)
+      }
+      
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        setMessages(prev => [...prev, data])
+      }
+      
+      eventSource.onerror = () => {
+        console.log('WebSocket déconnecté')
+        setIsConnected(false)
+        eventSource.close()
+        
+        // Reconnexion automatique après 5 secondes
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connect()
+        }, 5000)
+      }
+      
+      eventSourceRef.current = eventSource
+    } catch (error) {
+      console.error('Erreur connexion WebSocket:', error)
+    }
+  }
+  
+  useEffect(() => {
+    connect()
+    
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+    }
+  }, [endpoint])
+  
+  return { isConnected, messages }
+}
+
+// Utilisation dans un composant
+const NotificationScreen = () => {
+  const { isConnected, messages } = useAuthenticatedWebSocket('/api/user/notifications')
+  
+  return (
+    <View>
+      <Text>Status: {isConnected ? 'Connecté' : 'Déconnecté'}</Text>
+      {messages.map((msg, index) => (
+        <Text key={index}>{JSON.stringify(msg)}</Text>
+      ))}
+    </View>
+  )
+}
+\`\`\`
+
 ### 💡 **Recommandations :**
 1. **Pour l'authentification** : Utiliser le token dans l'URL (\`?token=...\`)
 2. **Pour les données** : Envoyer via REST puis écouter les mises à jour via WebSocket
 3. **Pour la sécurité** : Utiliser des tokens WebSocket temporaires (expiration courte)
+4. **Pour la robustesse** : Implémenter la reconnexion automatique
+5. **Pour les erreurs** : Gérer les codes 401/403 avec refresh automatique
 
 ## 🔐 Authentication Magic Link (WebSocket COMPLET)
 
