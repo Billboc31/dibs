@@ -64,15 +64,32 @@ export default function ApiDocsMobilePage() {
       }
 
       // Pour les WebSockets, utiliser EventSource au lieu de fetch
-      if (endpoint.path === '/api/auth/ws-complete') {
-        if (!testEmail) {
-          setTestResult({
-            status: 400,
-            statusText: 'Error',
-            data: { error: 'Email requis pour le WebSocket complet' }
-          })
-          setTestLoading(false)
-          return
+      if (endpoint.path.includes('/ws')) {
+        // WebSocket complet - nécessite un email
+        if (endpoint.path === '/api/auth/ws-complete') {
+          if (!testEmail) {
+            setTestResult({
+              status: 400,
+              statusText: 'Error',
+              data: { error: 'Email requis pour le WebSocket complet' }
+            })
+            setTestLoading(false)
+            return
+          }
+        }
+        // Autres WebSockets - nécessitent un token si authentifiés
+        else if (endpoint.auth) {
+          if (!testToken) {
+            setTestResult({
+              status: 400,
+              statusText: 'Error',
+              data: { error: 'Token requis pour ce WebSocket authentifié' }
+            })
+            setTestLoading(false)
+            return
+          }
+          // Ajouter le token à l'URL pour les WebSockets authentifiés
+          url += url.includes('?') ? `&token=${encodeURIComponent(testToken)}` : `?token=${encodeURIComponent(testToken)}`
         }
 
         // Créer EventSource pour le WebSocket
@@ -743,6 +760,27 @@ ${endpoint.auth ? `  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\\n` : ''}  -H "
                             <p className="mt-1 text-xs text-blue-600">
                               ⚡ Le WebSocket enverra automatiquement un Magic Link à cet email
                             </p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              🔓 Aucune authentification requise - Ce WebSocket sert à obtenir le token
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Info authentification WebSocket */}
+                        {endpoint.path.includes('/ws') && endpoint.path !== '/api/auth/ws-complete' && (
+                          <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                            <p className="text-xs text-yellow-800 font-medium mb-2">
+                              ⚠️ WebSocket avec authentification
+                            </p>
+                            <p className="text-xs text-yellow-700 mb-2">
+                              EventSource ne supporte pas les headers Authorization. 
+                              Le token sera passé dans l'URL : <code className="bg-yellow-100 px-1 rounded">?token=YOUR_TOKEN</code>
+                            </p>
+                            {endpoint.auth && testToken && (
+                              <p className="text-xs text-green-700">
+                                ✅ Token sera ajouté automatiquement à l'URL
+                              </p>
+                            )}
                           </div>
                         )}
                         

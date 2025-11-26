@@ -81,6 +81,69 @@ axios.interceptors.response.use(
 )
 \`\`\`
 
+## 🔌 **AUTHENTIFICATION WEBSOCKETS**
+
+### ❌ **WebSockets SANS authentification :**
+- \`GET /api/auth/ws-complete\` - WebSocket complet (Magic Link + Token)
+
+### ✅ **WebSockets AVEC authentification :**
+Pour les WebSockets qui nécessitent une authentification, **EventSource ne supporte PAS les headers personnalisés**. 
+Il faut utiliser d'autres méthodes :
+
+#### 🎯 **Méthode 1 : Token dans l'URL (Recommandée)**
+\`\`\`javascript
+// Passer le token comme paramètre query
+const token = await AsyncStorage.getItem('auth_token')
+const eventSource = new EventSource(
+  \`https://dibs-poc0.vercel.app/api/some-ws?token=\${token}\`
+)
+\`\`\`
+
+#### 🎯 **Méthode 2 : WebSocket natif avec headers**
+\`\`\`javascript
+// Utiliser WebSocket natif au lieu d'EventSource
+const token = await AsyncStorage.getItem('auth_token')
+const ws = new WebSocket('wss://dibs-poc0.vercel.app/api/some-ws', [], {
+  headers: {
+    'Authorization': \`Bearer \${token}\`
+  }
+})
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data)
+  console.log('Message WebSocket:', data)
+}
+\`\`\`
+
+#### 🎯 **Méthode 3 : Authentification initiale**
+\`\`\`javascript
+// 1. S'authentifier d'abord via REST
+const authResponse = await fetch('/api/auth/ws-token', {
+  method: 'POST',
+  headers: {
+    'Authorization': \`Bearer \${token}\`,
+    'Content-Type': 'application/json'
+  }
+})
+
+const { wsToken } = await authResponse.json()
+
+// 2. Utiliser le token WebSocket temporaire
+const eventSource = new EventSource(
+  \`https://dibs-poc0.vercel.app/api/some-ws?ws_token=\${wsToken}\`
+)
+\`\`\`
+
+### ⚠️ **Limitations EventSource :**
+- **Pas de headers personnalisés** (limitation du navigateur)
+- **Pas de méthode POST** (seulement GET)
+- **Pas de body** dans la requête
+
+### 💡 **Recommandations :**
+1. **Pour l'authentification** : Utiliser le token dans l'URL (\`?token=...\`)
+2. **Pour les données** : Envoyer via REST puis écouter les mises à jour via WebSocket
+3. **Pour la sécurité** : Utiliser des tokens WebSocket temporaires (expiration courte)
+
 ## 🔐 Authentication Magic Link (WebSocket COMPLET)
 
 L'authentification se fait avec le **WebSocket COMPLET** qui fait tout automatiquement :
@@ -449,6 +512,17 @@ const checkAuthStatus = async () => {
 
 ## 🔐 **AUTHENTIFICATION REQUISE : NON** 
 ❌ **Pas d'authentification nécessaire** - Ce WebSocket sert justement à obtenir le token d'authentification !
+
+### 🚫 **Pas de header Authorization requis :**
+\`\`\`javascript
+// ✅ CORRECT - Aucun header d'authentification
+const eventSource = new EventSource(
+  \`https://dibs-poc0.vercel.app/api/auth/ws-complete?email=\${email}\`
+)
+
+// ❌ INCORRECT - Ne pas ajouter de header Authorization
+// EventSource ne supporte pas les headers personnalisés de toute façon
+\`\`\`
 
 ## 🚀 WebSocket COMPLET - Tout automatique !
 
