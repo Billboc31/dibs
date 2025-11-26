@@ -59,8 +59,8 @@ headers: {
 import axios from 'axios'
 
 // Intercepteur pour ajouter automatiquement le token
-axios.interceptors.request.use((config) => {
-  const token = AsyncStorage.getItem('auth_token')
+axios.interceptors.request.use(async (config) => {
+  const token = await AsyncStorage.getItem('auth_token')
   if (token) {
     config.headers.Authorization = \`Bearer \${token}\`
   }
@@ -73,12 +73,150 @@ axios.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401) {
       // Token expiré - rediriger vers login
-      AsyncStorage.removeItem('auth_token')
+      await AsyncStorage.removeItem('auth_token')
+      await AsyncStorage.removeItem('refresh_token')
       navigation.navigate('Login')
     }
     return Promise.reject(error)
   }
 )
+\`\`\`
+
+### 🛠️ **Helper function pour appels authentifiés (Fetch) :**
+\`\`\`javascript
+// Fonction helper pour tous les appels API authentifiés
+const apiCall = async (endpoint, options = {}) => {
+  const authToken = await AsyncStorage.getItem('auth_token')
+  
+  if (!authToken) {
+    throw new Error('Token d\\'authentification manquant')
+  }
+  
+  const defaultOptions = {
+    headers: {
+      'Authorization': \`Bearer \${authToken}\`,
+      'Content-Type': 'application/json',
+      ...options.headers
+    }
+  }
+  
+  const response = await fetch(
+    \`https://dibs-poc0.vercel.app\${endpoint}\`,
+    { ...defaultOptions, ...options }
+  )
+  
+  const result = await response.json()
+  
+  if (!response.ok) {
+    // Gestion automatique des erreurs d'authentification
+    if (response.status === 401) {
+      await AsyncStorage.removeItem('auth_token')
+      await AsyncStorage.removeItem('refresh_token')
+      navigation.navigate('Login')
+      throw new Error('Token expiré - redirection vers login')
+    }
+    
+    throw new Error(result.error || \`Erreur HTTP \${response.status}\`)
+  }
+  
+  return result
+}
+
+// Utilisation simplifiée
+try {
+  // GET
+  const userProfile = await apiCall('/api/user/profile')
+  console.log('Profil:', userProfile.data.user)
+  
+  // POST
+  const scanResult = await apiCall('/api/qr/scan', {
+    method: 'POST',
+    body: JSON.stringify({ qrCode: 'ALBUM_MAYHEM_2024' })
+  })
+  console.log('Scan réussi:', scanResult.data)
+  
+  // PUT
+  const updatedProfile = await apiCall('/api/user/profile', {
+    method: 'PUT',
+    body: JSON.stringify({
+      display_name: 'Nouveau nom',
+      avatar_url: 'https://example.com/avatar.jpg'
+    })
+  })
+  console.log('Profil mis à jour:', updatedProfile.data.user)
+  
+} catch (error) {
+  console.error('Erreur API:', error.message)
+  Alert.alert('Erreur', error.message)
+}
+\`\`\`
+
+### 🎯 **Hook React Native pour API authentifiée :**
+\`\`\`javascript
+import { useState, useCallback } from 'react'
+
+const useAuthenticatedAPI = () => {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  
+  const call = useCallback(async (endpoint, options = {}) => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const result = await apiCall(endpoint, options)
+      setLoading(false)
+      return result
+    } catch (err) {
+      setError(err.message)
+      setLoading(false)
+      throw err
+    }
+  }, [])
+  
+  return { call, loading, error }
+}
+
+// Utilisation dans un composant
+const ProfileScreen = () => {
+  const { call, loading, error } = useAuthenticatedAPI()
+  const [profile, setProfile] = useState(null)
+  
+  const loadProfile = async () => {
+    try {
+      const result = await call('/api/user/profile')
+      setProfile(result.data.user)
+    } catch (error) {
+      // Erreur déjà gérée par le hook
+    }
+  }
+  
+  const updateProfile = async (newData) => {
+    try {
+      const result = await call('/api/user/profile', {
+        method: 'PUT',
+        body: JSON.stringify(newData)
+      })
+      setProfile(result.data.user)
+      Alert.alert('Succès', 'Profil mis à jour !')
+    } catch (error) {
+      // Erreur déjà gérée par le hook
+    }
+  }
+  
+  return (
+    <View>
+      {loading && <ActivityIndicator />}
+      {error && <Text style={{color: 'red'}}>{error}</Text>}
+      {profile && (
+        <View>
+          <Text>{profile.display_name}</Text>
+          <Text>{profile.email}</Text>
+        </View>
+      )}
+    </View>
+  )
+}
 \`\`\`
 
 ## 🔌 **AUTHENTIFICATION WEBSOCKETS**
@@ -1001,15 +1139,37 @@ const LoginScreen = ({ navigation }) => {
 ## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
 ✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
 
-### 📝 Exemple avec token :
+### 📝 Exemple avec Bearer token :
 \`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+
 const response = await fetch('https://dibs-poc0.vercel.app/api/auth/me', {
   method: 'GET',
   headers: {
-    'Authorization': 'Bearer ' + authToken,
+    'Authorization': \`Bearer \${authToken}\`,
     'Content-Type': 'application/json'
   }
 })
+
+const result = await response.json()
+
+if (response.ok) {
+  console.log('Utilisateur:', result.data.user)
+} else {
+  console.error('Erreur:', result.error)
+  // Si 401, token expiré -> rediriger vers login
+  if (response.status === 401) {
+    AsyncStorage.removeItem('auth_token')
+    navigation.navigate('Login')
+  }
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X GET https://dibs-poc0.vercel.app/api/auth/me \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json"
 \`\`\``,
           'x-priority': 'P0',
           responses: {
@@ -1066,15 +1226,36 @@ const response = await fetch('https://dibs-poc0.vercel.app/api/auth/me', {
 ## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
 ✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
 
-### 📝 Exemple avec token :
+### 📝 Exemple avec Bearer token :
 \`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+
 const response = await fetch('https://dibs-poc0.vercel.app/api/auth/logout', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer ' + authToken,
+    'Authorization': \`Bearer \${authToken}\`,
     'Content-Type': 'application/json'
   }
 })
+
+const result = await response.json()
+
+if (response.ok) {
+  console.log('Déconnexion réussie')
+  // Supprimer les tokens locaux
+  await AsyncStorage.removeItem('auth_token')
+  await AsyncStorage.removeItem('refresh_token')
+  navigation.navigate('Login')
+} else {
+  console.error('Erreur déconnexion:', result.error)
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X POST https://dibs-poc0.vercel.app/api/auth/logout \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json"
 \`\`\``,
           'x-priority': 'P0',
           responses: {
@@ -1111,15 +1292,40 @@ const response = await fetch('https://dibs-poc0.vercel.app/api/auth/logout', {
 ## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
 ✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
 
-### 📝 Exemple avec token :
+### 📝 Exemple avec Bearer token :
 \`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+
 const response = await fetch('https://dibs-poc0.vercel.app/api/user/profile', {
   method: 'GET',
   headers: {
-    'Authorization': 'Bearer ' + authToken,
+    'Authorization': \`Bearer \${authToken}\`,
     'Content-Type': 'application/json'
   }
 })
+
+const result = await response.json()
+
+if (response.ok) {
+  const user = result.data.user
+  console.log('Profil utilisateur:', user)
+  // Utiliser les données du profil
+  setUserProfile(user)
+} else {
+  console.error('Erreur profil:', result.error)
+  if (response.status === 401) {
+    // Token expiré
+    AsyncStorage.removeItem('auth_token')
+    navigation.navigate('Login')
+  }
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X GET https://dibs-poc0.vercel.app/api/user/profile \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json"
 \`\`\``,
           'x-priority': 'P0',
           responses: {
@@ -1167,7 +1373,41 @@ const response = await fetch('https://dibs-poc0.vercel.app/api/user/profile', {
           description: `Met à jour les informations du profil utilisateur.
 
 ## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
-✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\``,
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec Bearer token :
+\`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+
+const response = await fetch('https://dibs-poc0.vercel.app/api/user/profile', {
+  method: 'PUT',
+  headers: {
+    'Authorization': \`Bearer \${authToken}\`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    display_name: 'John Doe',
+    avatar_url: 'https://example.com/avatar.jpg'
+  })
+})
+
+const result = await response.json()
+
+if (response.ok) {
+  console.log('Profil mis à jour:', result.data.user)
+  setUserProfile(result.data.user)
+} else {
+  console.error('Erreur mise à jour:', result.error)
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X PUT https://dibs-poc0.vercel.app/api/user/profile \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"display_name":"John Doe","avatar_url":"https://example.com/avatar.jpg"}'
+\`\`\``,
           'x-priority': 'P1',
           requestBody: {
             required: true,
@@ -1285,15 +1525,41 @@ const response = await fetch('https://dibs-poc0.vercel.app/api/user/profile', {
 ## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
 ✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
 
-### 📝 Exemple avec token :
+### 📝 Exemple avec Bearer token :
 \`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+
 const response = await fetch('https://dibs-poc0.vercel.app/api/user/stats', {
   method: 'GET',
   headers: {
-    'Authorization': 'Bearer ' + authToken,
+    'Authorization': \`Bearer \${authToken}\`,
     'Content-Type': 'application/json'
   }
 })
+
+const result = await response.json()
+
+if (response.ok) {
+  const stats = result.data
+  console.log('Statistiques utilisateur:', stats)
+  
+  // Utiliser les stats dans l'interface
+  setStats({
+    totalArtists: stats.totalArtists,
+    totalPoints: stats.totalPoints,
+    upcomingEvents: stats.upcomingEvents,
+    qrScans: stats.qrScans
+  })
+} else {
+  console.error('Erreur stats:', result.error)
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X GET https://dibs-poc0.vercel.app/api/user/stats \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json"
 \`\`\``,
 
           'x-priority': 'P0',
@@ -1343,15 +1609,38 @@ const response = await fetch('https://dibs-poc0.vercel.app/api/user/stats', {
 ## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
 ✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
 
-### 📝 Exemple avec token et pagination :
+### 📝 Exemple avec Bearer token et pagination :
 \`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+
 const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists?page=1&limit=10', {
   method: 'GET',
   headers: {
-    'Authorization': 'Bearer ' + authToken,
+    'Authorization': \`Bearer \${authToken}\`,
     'Content-Type': 'application/json'
   }
 })
+
+const result = await response.json()
+
+if (response.ok) {
+  const { artists, pagination } = result.data
+  console.log(\`\${artists.length} artistes récupérés\`)
+  console.log(\`Page \${pagination.page}/\${Math.ceil(pagination.total / pagination.limit)}\`)
+  
+  // Ajouter à la liste existante (scroll infini)
+  setArtists(prev => [...prev, ...artists])
+  setHasMore(pagination.hasMore)
+} else {
+  console.error('Erreur artistes:', result.error)
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X GET "https://dibs-poc0.vercel.app/api/user/artists?page=1&limit=10" \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json"
 \`\`\``,
           'x-priority': 'P0',
           parameters: [
@@ -1444,18 +1733,39 @@ const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists?page
 ## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
 ✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
 
-### 📝 Exemple avec token :
+### 📝 Exemple avec Bearer token :
 \`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+
 const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists/save', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer ' + authToken,
+    'Authorization': \`Bearer \${authToken}\`,
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    artistIds: ['uuid1', 'uuid2']
+    artistIds: ['550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440002']
   })
 })
+
+const result = await response.json()
+
+if (response.ok) {
+  console.log(\`\${result.data.count} artistes sauvegardés\`)
+  Alert.alert('Succès', 'Vos artistes préférés ont été sauvegardés !')
+  navigation.navigate('Home')
+} else {
+  console.error('Erreur sauvegarde:', result.error)
+  Alert.alert('Erreur', 'Impossible de sauvegarder vos artistes')
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X POST https://dibs-poc0.vercel.app/api/user/artists/save \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"artistIds":["550e8400-e29b-41d4-a716-446655440001","550e8400-e29b-41d4-a716-446655440002"]}'
 \`\`\``,
 
           'x-priority': 'P0',
@@ -1722,18 +2032,47 @@ const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists/save
 ## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
 ✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
 
-### 📝 Exemple avec token :
+### 📝 Exemple avec Bearer token :
 \`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+
 const response = await fetch('https://dibs-poc0.vercel.app/api/qr/scan', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer ' + authToken,
+    'Authorization': \`Bearer \${authToken}\`,
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
     qrCode: 'ALBUM_MAYHEM_2024'
   })
 })
+
+const result = await response.json()
+
+if (response.ok) {
+  const { pointsEarned, artist, totalPoints } = result.data
+  console.log(\`+\${pointsEarned} points pour \${artist.name} !\`)
+  
+  Alert.alert(
+    'QR Code scanné ! 🎉',
+    \`Vous avez gagné \${pointsEarned} points pour \${artist.name}\\n\\nTotal: \${totalPoints} points\`,
+    [{ text: 'Super !', style: 'default' }]
+  )
+  
+  // Mettre à jour les points dans l'interface
+  setUserPoints(totalPoints)
+} else {
+  console.error('Erreur scan QR:', result.error)
+  Alert.alert('Erreur', result.error)
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X POST https://dibs-poc0.vercel.app/api/qr/scan \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"qrCode":"ALBUM_MAYHEM_2024"}'
 \`\`\``,
           'x-priority': 'P0',
           requestBody: {
