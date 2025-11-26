@@ -159,6 +159,349 @@ Pour obtenir ce token, l'app mobile doit :
     },
     security: [{ BearerAuth: [] }],
     paths: {
+      '/api/auth/login': {
+        post: {
+          tags: ['Auth'],
+          summary: '🔐 P0 - Connexion email/password',
+          description: '**CRITIQUE** - Authentifie un utilisateur avec email et mot de passe.',
+          'x-priority': 'P0',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['email', 'password'],
+                  properties: {
+                    email: { type: 'string', format: 'email', example: 'user@example.com' },
+                    password: { type: 'string', minLength: 6, example: 'password123' }
+                  }
+                },
+                example: {
+                  email: 'user@example.com',
+                  password: 'password123'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Connexion réussie',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          user: { $ref: '#/components/schemas/User' },
+                          session: {
+                            type: 'object',
+                            properties: {
+                              access_token: { type: 'string' },
+                              refresh_token: { type: 'string' },
+                              expires_at: { type: 'integer' },
+                              expires_in: { type: 'integer' }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      user: {
+                        id: '550e8400-e29b-41d4-a716-446655440000',
+                        email: 'user@example.com',
+                        display_name: 'John Doe',
+                        avatar_url: null,
+                        city: null,
+                        country: null,
+                        created_at: '2025-01-15T10:30:00Z'
+                      },
+                      session: {
+                        access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                        refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                        expires_at: 1737891000,
+                        expires_in: 3600
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            400: { description: 'Données manquantes', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            401: { description: 'Identifiants incorrects', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }
+          }
+        }
+      },
+      '/api/auth/register': {
+        post: {
+          tags: ['Auth'],
+          summary: '📝 P0 - Inscription utilisateur',
+          description: '**CRITIQUE** - Crée un nouveau compte utilisateur.',
+          'x-priority': 'P0',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['email', 'password'],
+                  properties: {
+                    email: { type: 'string', format: 'email', example: 'newuser@example.com' },
+                    password: { type: 'string', minLength: 6, example: 'password123' },
+                    display_name: { type: 'string', example: 'John Doe' }
+                  }
+                },
+                example: {
+                  email: 'newuser@example.com',
+                  password: 'password123',
+                  display_name: 'John Doe'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Inscription réussie',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          user: { $ref: '#/components/schemas/User' },
+                          session: {
+                            type: 'object',
+                            properties: {
+                              access_token: { type: 'string' },
+                              refresh_token: { type: 'string' },
+                              expires_at: { type: 'integer' },
+                              expires_in: { type: 'integer' }
+                            }
+                          },
+                          message: { type: 'string' }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      user: {
+                        id: '550e8400-e29b-41d4-a716-446655440001',
+                        email: 'newuser@example.com',
+                        display_name: 'John Doe',
+                        email_confirmed: true,
+                        created_at: '2025-11-26T15:30:00Z'
+                      },
+                      session: {
+                        access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                        refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                        expires_at: 1737891000,
+                        expires_in: 3600
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            400: { description: 'Données invalides ou email déjà utilisé', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }
+          }
+        }
+      },
+      '/api/auth/oauth/google': {
+        post: {
+          tags: ['Auth'],
+          summary: '🔐 P1 - OAuth Google',
+          description: 'Initie l\'authentification OAuth avec Google.',
+          'x-priority': 'P1',
+          requestBody: {
+            required: false,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    redirectTo: { type: 'string', example: 'dibs://auth/callback' }
+                  }
+                },
+                example: {
+                  redirectTo: 'dibs://auth/callback'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'URL d\'authentification Google',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          url: { type: 'string' },
+                          provider: { type: 'string', example: 'google' },
+                          message: { type: 'string' }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      url: 'https://accounts.google.com/oauth/authorize?...',
+                      provider: 'google',
+                      message: 'Redirection vers Google OAuth'
+                    }
+                  }
+                }
+              }
+            },
+            400: { description: 'Erreur OAuth', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }
+          }
+        }
+      },
+      '/api/auth/oauth/apple': {
+        post: {
+          tags: ['Auth'],
+          summary: '🍎 P1 - OAuth Apple',
+          description: 'Initie l\'authentification OAuth avec Apple.',
+          'x-priority': 'P1',
+          requestBody: {
+            required: false,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    redirectTo: { type: 'string', example: 'dibs://auth/callback' }
+                  }
+                },
+                example: {
+                  redirectTo: 'dibs://auth/callback'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'URL d\'authentification Apple',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          url: { type: 'string' },
+                          provider: { type: 'string', example: 'apple' },
+                          message: { type: 'string' }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      url: 'https://appleid.apple.com/auth/authorize?...',
+                      provider: 'apple',
+                      message: 'Redirection vers Apple OAuth'
+                    }
+                  }
+                }
+              }
+            },
+            400: { description: 'Erreur OAuth', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }
+          }
+        }
+      },
+      '/api/auth/refresh': {
+        post: {
+          tags: ['Auth'],
+          summary: '🔄 P0 - Rafraîchir le token',
+          description: '**CRITIQUE** - Rafraîchit l\'access token avec le refresh token.',
+          'x-priority': 'P0',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['refresh_token'],
+                  properties: {
+                    refresh_token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' }
+                  }
+                },
+                example: {
+                  refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Token rafraîchi',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          session: {
+                            type: 'object',
+                            properties: {
+                              access_token: { type: 'string' },
+                              refresh_token: { type: 'string' },
+                              expires_at: { type: 'integer' },
+                              expires_in: { type: 'integer' }
+                            }
+                          },
+                          user: { $ref: '#/components/schemas/User' }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      session: {
+                        access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                        refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                        expires_at: 1737894600,
+                        expires_in: 3600
+                      },
+                      user: {
+                        id: '550e8400-e29b-41d4-a716-446655440000',
+                        email: 'user@example.com',
+                        display_name: 'John Doe'
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            400: { description: 'Refresh token manquant', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            401: { description: 'Refresh token invalide', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }
+          }
+        }
+      },
       '/api/auth/me': {
         get: {
           tags: ['Auth'],
