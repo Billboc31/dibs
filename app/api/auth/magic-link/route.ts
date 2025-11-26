@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       data: {
         email: email,
         message: 'Magic Link envoyé ! Vérifiez votre boîte email.',
-        message_id: data?.message_id || null,
+        message_id: data?.messageId || null,
         redirect_to: defaultRedirectTo
       }
     })
