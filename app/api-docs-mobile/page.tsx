@@ -290,6 +290,55 @@ export default function ApiDocsMobilePage() {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full max-w-xl px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+        
+        {/* Token global pour tous les tests */}
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h3 className="text-sm font-bold text-blue-900 mb-2">🔑 Token Bearer Global</h3>
+          <p className="text-xs text-blue-700 mb-3">
+            Saisissez votre token Bearer ici pour l'utiliser automatiquement dans tous les webservices authentifiés.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={testToken}
+              onChange={(e) => setTestToken(e.target.value)}
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              className="flex-1 px-3 py-2 border border-blue-300 rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={() => {
+                const exampleToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3Vpa3NiaGdvamd2eXRhcGVsYnVxLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIwYjNlNWZkMS0zYWIzLTQxY2QtYWIzOS04NmIxMzc2ZWNhYWYiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY0MjA0MDQ2LCJpYXQiOjE3NjQyMDA0NDYsImVtYWlsIjoiYm9jcXVldC5waWVycmVAZ21haWwuY29tIn0.EXAMPLE_TOKEN_FOR_TESTING'
+                setTestToken(exampleToken)
+              }}
+              className="px-3 py-2 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+            >
+              📋 Exemple
+            </button>
+            <button
+              onClick={() => setTestToken('')}
+              className="px-3 py-2 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
+            >
+              🗑️ Effacer
+            </button>
+          </div>
+          {testToken && (
+            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
+              <p className="text-xs text-green-700">
+                ✅ Token configuré: {testToken.substring(0, 40)}...
+              </p>
+              <p className="text-xs text-green-600 mt-1">
+                Ce token sera automatiquement utilisé pour tous les webservices authentifiés.
+              </p>
+            </div>
+          )}
+          {!testToken && (
+            <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
+              <p className="text-xs text-yellow-700">
+                ⚠️ Aucun token configuré. Obtenez-en un via le WebSocket complet (/api/auth/ws-complete).
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Bouton pour afficher la doc OAuth */}
         <div className="mt-4">
@@ -649,8 +698,12 @@ function generateRandomString(length: number): string {
                           {tagIcons[endpoint.tag] || '📌'} {endpoint.tag}
                         </span>
                         {endpoint.auth && (
-                          <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-                            🔒 Auth requise
+                          <span className={`px-3 py-1 rounded text-xs font-medium ${
+                            testToken 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            {testToken ? '🔓 Token configuré' : '🔒 Token requis'}
                           </span>
                         )}
                         {endpoint.requestBodyExample && (
@@ -794,16 +847,31 @@ ${endpoint.auth ? `  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\\n` : ''}  -H "
                         
                         {endpoint.auth && (
                           <div className="mb-3">
-                            <label className="block text-xs text-gray-700 mb-1 font-medium">
-                              Bearer Token (optionnel):
-                            </label>
-                            <input
-                              type="text"
-                              value={testToken}
-                              onChange={(e) => setTestToken(e.target.value)}
-                              placeholder="Votre JWT token..."
-                              className="w-full px-3 py-2 border border-gray-300 rounded text-xs font-mono"
-                            />
+                            {testToken ? (
+                              <div className="p-3 bg-green-50 border border-green-200 rounded">
+                                <p className="text-xs text-green-700 font-medium mb-1">
+                                  ✅ Bearer Token configuré (global)
+                                </p>
+                                <p className="text-xs text-green-600">
+                                  Token: {testToken.substring(0, 40)}...
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Ce token sera automatiquement ajouté au header Authorization
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="p-3 bg-red-50 border border-red-200 rounded">
+                                <p className="text-xs text-red-700 font-medium mb-1">
+                                  ❌ Bearer Token requis
+                                </p>
+                                <p className="text-xs text-red-600">
+                                  Configurez votre token dans la section "Token Bearer Global" en haut de la page.
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  💡 Obtenez un token via le WebSocket complet (/api/auth/ws-complete)
+                                </p>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -829,7 +897,11 @@ ${endpoint.auth ? `  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\\n` : ''}  -H "
 
                         <button
                           onClick={() => handleTestEndpoint(endpoint)}
-                          disabled={testLoading || (endpoint.path === '/api/auth/ws-complete' && !testEmail)}
+                          disabled={
+                            testLoading || 
+                            (endpoint.path === '/api/auth/ws-complete' && !testEmail) ||
+                            (endpoint.auth && endpoint.path !== '/api/auth/ws-complete' && !testToken)
+                          }
                           className="w-full px-4 py-2 bg-green-600 text-white rounded font-medium hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
                           {testLoading 
