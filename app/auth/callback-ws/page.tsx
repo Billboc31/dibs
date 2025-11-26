@@ -7,20 +7,40 @@ import { useSearchParams } from 'next/navigation'
 export default function AuthCallbackWS() {
   const [status, setStatus] = useState('Vérification en cours...')
   const [error, setError] = useState('')
+  const [debugInfo, setDebugInfo] = useState<any>(null)
   const searchParams = useSearchParams()
 
   useEffect(() => {
+    // Timeout de sécurité
+    const timeoutId = setTimeout(() => {
+      setError('Timeout - La vérification a pris trop de temps (30s)')
+      setDebugInfo({
+        timeout: true,
+        params: Object.fromEntries(searchParams.entries()),
+        timestamp: new Date().toISOString()
+      })
+    }, 30000) // 30 secondes
+
     const handleAuthCallback = async () => {
       try {
         const email = searchParams.get('email')
+        const allParams = Object.fromEntries(searchParams.entries())
+        
+        setDebugInfo({
+          email,
+          allParams,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent
+        })
         
         if (!email) {
           setError('Email manquant dans l\'URL')
+          clearTimeout(timeoutId)
           return
         }
 
         console.log('🔄 Callback WebSocket pour:', email)
-        console.log('📋 Paramètres URL:', Object.fromEntries(searchParams.entries()))
+        console.log('📋 Paramètres URL:', allParams)
         setStatus('Vérification du Magic Link...')
 
         let sessionData = null
@@ -60,10 +80,14 @@ export default function AuthCallbackWS() {
         // Méthode 1: Vérification OTP avec token_hash
         if (token_hash && type) {
           console.log('🔑 Vérification OTP avec token_hash')
+          setStatus('Vérification OTP en cours...')
+          
           const { data, error } = await supabase.auth.verifyOtp({
             token_hash,
             type: type as any
           })
+          
+          console.log('📤 Résultat verifyOtp:', { data: !!data, error: error?.message })
 
           if (error) {
             console.error('❌ Erreur vérification OTP:', error)
@@ -89,10 +113,14 @@ export default function AuthCallbackWS() {
         // Méthode 2: Session directe avec access_token/refresh_token
         else if (access_token && refresh_token) {
           console.log('🔑 Établissement session avec tokens')
+          setStatus('Établissement de la session...')
+          
           const { data, error } = await supabase.auth.setSession({
             access_token,
             refresh_token
           })
+          
+          console.log('📤 Résultat setSession:', { data: !!data, error: error?.message })
 
           if (error) {
             console.error('❌ Erreur setSession:', error)
@@ -118,7 +146,11 @@ export default function AuthCallbackWS() {
         // Méthode 3: Échange de code (OAuth flow)
         else if (code) {
           console.log('🔑 Échange de code OAuth')
+          setStatus('Échange du code d\'autorisation...')
+          
           const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+          
+          console.log('📤 Résultat exchangeCode:', { data: !!data, error: error?.message })
 
           if (error) {
             console.error('❌ Erreur échange code:', error)
@@ -144,7 +176,11 @@ export default function AuthCallbackWS() {
         // Méthode 4: Essayer de récupérer la session actuelle
         else {
           console.log('🔑 Tentative récupération session actuelle')
+          setStatus('Recherche de session existante...')
+          
           const { data, error } = await supabase.auth.getSession()
+          
+          console.log('📤 Résultat getSession:', { data: !!data?.session, error: error?.message })
           
           if (error || !data.session) {
             console.error('❌ Aucune session trouvée:', error?.message || 'Session null')
@@ -169,6 +205,7 @@ export default function AuthCallbackWS() {
         }
 
         if (sessionData?.user && sessionData?.session) {
+          clearTimeout(timeoutId) // Annuler le timeout
           setStatus('Authentification réussie ! Envoi du token...')
           
           console.log('✅ Session établie pour:', sessionData.user.email)
@@ -176,6 +213,7 @@ export default function AuthCallbackWS() {
           console.log('🔄 Token refresh:', sessionData.session.refresh_token?.substring(0, 20) + '...')
           
           // Envoyer le token au WebSocket
+          console.log('📡 Envoi notification WebSocket...')
           const notifyResponse = await fetch('/api/auth/ws-complete/notify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -201,6 +239,8 @@ export default function AuthCallbackWS() {
             })
           })
 
+          console.log('📡 Réponse notification:', notifyResponse.status, notifyResponse.ok)
+
           if (notifyResponse.ok) {
             setStatus('Token envoyé avec succès ! Vous pouvez fermer cette page.')
             
@@ -209,17 +249,41 @@ export default function AuthCallbackWS() {
               window.close()
             }, 3000)
           } else {
+            const errorText = await notifyResponse.text()
+            console.error('❌ Erreur notification WebSocket:', errorText)
             setStatus('Authentification réussie mais erreur d\'envoi au WebSocket')
+            setError(`Erreur notification: ${errorText}`)
           }
+        } else {
+          clearTimeout(timeoutId)
+          console.error('❌ Aucune session valide trouvée')
+          setError('Aucune session d\'authentification valide trouvée')
+          
+          setDebugInfo(prev => ({
+            ...prev,
+            sessionData,
+            hasUser: !!sessionData?.user,
+            hasSession: !!sessionData?.session
+          }))
         }
 
       } catch (error) {
-        console.error('Erreur callback auth:', error)
+        clearTimeout(timeoutId)
+        console.error('❌ Erreur callback auth:', error)
         setError(`Erreur inattendue: ${error instanceof Error ? error.message : 'Erreur inconnue'}`)
+        
+        setDebugInfo(prev => ({
+          ...prev,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        }))
       }
     }
 
     handleAuthCallback()
+    
+    // Cleanup timeout si le composant est démonté
+    return () => clearTimeout(timeoutId)
   }, [searchParams])
 
   return (
@@ -241,13 +305,13 @@ export default function AuthCallbackWS() {
             <h2 className="text-lg font-semibold text-red-600 mb-2">Erreur</h2>
             <p className="text-red-500 text-sm mb-4">{error}</p>
             
-            {/* Afficher les paramètres pour debug */}
+            {/* Afficher les informations de debug */}
             <details className="text-left bg-red-50 border border-red-200 rounded p-3">
               <summary className="text-xs text-red-700 cursor-pointer font-medium">
-                🔍 Paramètres reçus (debug)
+                🔍 Informations de debug
               </summary>
               <pre className="text-xs text-red-600 mt-2 overflow-x-auto">
-                {JSON.stringify(Object.fromEntries(searchParams.entries()), null, 2)}
+                {JSON.stringify(debugInfo, null, 2)}
               </pre>
             </details>
           </div>
@@ -276,6 +340,26 @@ export default function AuthCallbackWS() {
               Cette page se ferme automatiquement dans 3 secondes
             </p>
           </div>
+        )}
+
+        {/* Bouton de fermeture manuelle */}
+        {!status.includes('fermer') && !error && (
+          <button
+            onClick={() => window.close()}
+            className="mt-4 px-4 py-2 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
+          >
+            🚪 Fermer cette page
+          </button>
+        )}
+
+        {/* Bouton de retry si erreur */}
+        {error && (
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+          >
+            🔄 Réessayer
+          </button>
         )}
 
         <div className="text-xs text-gray-400 mt-6">
