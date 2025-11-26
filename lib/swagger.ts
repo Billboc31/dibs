@@ -12,15 +12,15 @@ export const getApiDocs = () => {
     },
     servers: [
       {
+        url: 'https://dibs-poc0.vercel.app',
+        description: 'Production server (Vercel)'
+      },
+      {
         url: 'http://127.0.0.1:3001',
         description: 'Development server (Next.js API Routes)'
       },
       {
-        url: 'http://localhost:3001',
-        description: 'Local server (Next.js API Routes)'
-      },
-      {
-        url: 'https://your-project.supabase.co/functions/v1',
+        url: 'https://uiksbhgojgvytapelbuq.supabase.co/functions/v1',
         description: 'Supabase Edge Functions'
       }
     ],

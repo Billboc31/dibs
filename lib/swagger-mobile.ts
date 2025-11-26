@@ -56,12 +56,12 @@ Pour obtenir ce token, l'app mobile doit :
     },
     servers: [
       {
-        url: 'http://127.0.0.1:3001',
-        description: 'Développement local'
+        url: 'https://dibs-poc0.vercel.app',
+        description: 'Production'
       },
       {
-        url: 'https://api.dibs.app',
-        description: 'Production'
+        url: 'http://127.0.0.1:3001',
+        description: 'Développement local'
       }
     ],
     tags: [
