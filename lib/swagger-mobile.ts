@@ -991,6 +991,278 @@ const LoginScreen = ({ navigation }) => {
           }
         }
       },
+      '/api/auth/ws-simple': {
+        get: {
+          tags: ['Auth'],
+          summary: '⚡ P0 - WebSocket ULTRA SIMPLE',
+          description: `**CRITIQUE** - WebSocket ultra simple : donnez l'email, récupérez le token !
+
+## ⚡ Utilisation ULTRA SIMPLE
+
+\`\`\`javascript
+// Connexion WebSocket ultra simple
+const connectSimpleWS = (email) => {
+  const eventSource = new EventSource(
+    \`https://dibs-poc0.vercel.app/api/auth/ws-simple?email=\${encodeURIComponent(email)}\`
+  )
+  
+  eventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data)
+    console.log('WebSocket message:', data)
+    
+    switch (data.status) {
+      case 'connected':
+        console.log('✅ WebSocket connecté pour', data.email)
+        setStatus('En attente de la connexion...')
+        break
+        
+      case 'authenticated':
+        console.log('🎉 UTILISATEUR CONNECTÉ !', data.user)
+        console.log('📧 Email:', data.user.email)
+        console.log('👤 ID:', data.user.id)
+        
+        // L'utilisateur est connecté !
+        Alert.alert('Connexion réussie !', \`Bienvenue \${data.user.email} !\`)
+        
+        // Maintenant récupérer le vrai token avec Supabase
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session) {
+            const token = session.access_token
+            console.log('🔑 Token récupéré:', token)
+            
+            // Sauvegarder et rediriger
+            AsyncStorage.setItem('auth_token', token)
+            navigation.navigate('Home')
+          }
+        })
+        
+        eventSource.close()
+        break
+        
+      case 'waiting':
+        console.log('⏳ En attente...', data.message)
+        setStatus('En attente de la connexion...')
+        break
+        
+      case 'timeout':
+        console.log('⏰ Timeout WebSocket')
+        setStatus('Timeout - Veuillez réessayer')
+        eventSource.close()
+        break
+        
+      case 'error':
+        console.error('❌ Erreur:', data.error)
+        setStatus('Erreur de connexion')
+        eventSource.close()
+        break
+    }
+  }
+  
+  return eventSource
+}
+\`\`\`
+
+## 📱 Exemple complet ULTRA SIMPLE
+
+\`\`\`javascript
+// LoginScreen avec WebSocket ultra simple
+const LoginScreen = ({ navigation }) => {
+  const [email, setEmail] = useState('')
+  const [status, setStatus] = useState('')
+  const [isConnected, setIsConnected] = useState(false)
+  const eventSourceRef = useRef(null)
+  
+  const handleLogin = async () => {
+    if (!email) {
+      Alert.alert('Erreur', 'Saisissez votre email')
+      return
+    }
+    
+    try {
+      // 1. Envoyer le Magic Link
+      const response = await fetch('https://dibs-poc0.vercel.app/api/auth/magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        // 2. Connecter au WebSocket ULTRA SIMPLE
+        const eventSource = new EventSource(
+          \`https://dibs-poc0.vercel.app/api/auth/ws-simple?email=\${encodeURIComponent(email)}\`
+        )
+        
+        eventSourceRef.current = eventSource
+        setIsConnected(true)
+        
+        eventSource.onmessage = (event) => {
+          const data = JSON.parse(event.data)
+          
+          if (data.status === 'authenticated') {
+            // BINGO ! L'utilisateur est connecté !
+            setStatus('Connexion réussie ! 🎉')
+            
+            // Récupérer le token Supabase
+            supabase.auth.getSession().then(({ data: { session } }) => {
+              if (session) {
+                AsyncStorage.setItem('auth_token', session.access_token)
+                navigation.navigate('Home')
+              }
+            })
+            
+            eventSource.close()
+            setIsConnected(false)
+          } else {
+            setStatus(data.message)
+          }
+        }
+        
+        Alert.alert('Email envoyé !', 'Cliquez sur le lien. La connexion sera détectée automatiquement.')
+        
+      } else {
+        Alert.alert('Erreur', result.error)
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible d\'envoyer l\'email')
+    }
+  }
+  
+  const handleCancel = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+    }
+    setIsConnected(false)
+    setStatus('')
+  }
+  
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>DIBS - Connexion Ultra Simple</Text>
+      
+      {!isConnected ? (
+        <>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Votre email"
+            keyboardType="email-address"
+          />
+          <TouchableOpacity onPress={handleLogin}>
+            <Text>Connexion WebSocket Simple</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View>
+          <Text>WebSocket actif</Text>
+          <Text>{status}</Text>
+          <TouchableOpacity onPress={handleCancel}>
+            <Text>Annuler</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  )
+}
+\`\`\`
+
+## 🎯 Messages WebSocket Simple
+
+- \`connected\` - WebSocket connecté
+- \`authenticated\` - Utilisateur connecté (avec infos user)
+- \`waiting\` - En attente de connexion
+- \`timeout\` - Timeout après 3 minutes
+- \`error\` - Erreur
+
+## ⚡ Pourquoi "Ultra Simple" ?
+
+- ✅ **1 seul paramètre** - Juste l'email
+- ✅ **Détection automatique** - Pas de token à gérer
+- ✅ **Messages clairs** - Status simple à comprendre
+- ✅ **Timeout court** - 3 minutes max
+- ✅ **Fermeture auto** - Se ferme après authentification`,
+          'x-priority': 'P0',
+          parameters: [
+            {
+              name: 'email',
+              in: 'query',
+              required: true,
+              description: 'Email de l\'utilisateur à surveiller',
+              schema: { type: 'string', format: 'email', example: 'user@example.com' }
+            }
+          ],
+          responses: {
+            200: {
+              description: 'WebSocket ultra simple - Messages en temps réel',
+              content: {
+                'text/event-stream': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      status: { 
+                        type: 'string', 
+                        enum: ['connected', 'authenticated', 'waiting', 'timeout', 'error'],
+                        example: 'authenticated' 
+                      },
+                      message: { type: 'string', example: 'Utilisateur connecté avec succès !' },
+                      email: { type: 'string', format: 'email', example: 'user@example.com' },
+                      user: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string', format: 'uuid' },
+                          email: { type: 'string', format: 'email' },
+                          display_name: { type: 'string', nullable: true },
+                          avatar_url: { type: 'string', nullable: true },
+                          last_sign_in_at: { type: 'string', format: 'date-time' },
+                          created_at: { type: 'string', format: 'date-time' }
+                        }
+                      },
+                      auth_info: {
+                        type: 'object',
+                        properties: {
+                          user_id: { type: 'string', format: 'uuid' },
+                          email: { type: 'string', format: 'email' },
+                          authenticated_at: { type: 'string', format: 'date-time' },
+                          note: { type: 'string', example: 'Utilisez supabase.auth.getSession() dans l\'app mobile pour récupérer le vrai token' }
+                        }
+                      },
+                      timestamp: { type: 'string', format: 'date-time' }
+                    }
+                  },
+                  example: {
+                    status: 'authenticated',
+                    message: 'Utilisateur connecté avec succès !',
+                    email: 'user@example.com',
+                    user: {
+                      id: '550e8400-e29b-41d4-a716-446655440000',
+                      email: 'user@example.com',
+                      display_name: 'John Doe',
+                      last_sign_in_at: '2025-11-26T17:00:00Z',
+                      created_at: '2025-11-20T10:00:00Z'
+                    },
+                    auth_info: {
+                      user_id: '550e8400-e29b-41d4-a716-446655440000',
+                      email: 'user@example.com',
+                      authenticated_at: '2025-11-26T17:00:00Z',
+                      note: 'Utilisez supabase.auth.getSession() dans l\'app mobile pour récupérer le vrai token'
+                    },
+                    timestamp: '2025-11-26T17:00:00Z'
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Email manquant',
+              content: {
+                'text/plain': {
+                  schema: { type: 'string', example: 'Email parameter required' }
+                }
+              }
+            }
+          }
+        }
+      },
 
       // === USER PROFILE ===
       '/api/user/profile': {
