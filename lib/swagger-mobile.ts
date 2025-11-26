@@ -8,9 +8,78 @@ const options: any = {
       version: '1.0.0',
       description: `📱 **API complète pour l'application mobile DIBS**
 
-Cette API est spécifiquement conçue pour l'application mobile. Tous les endpoints nécessitent une authentification via Supabase.
+Cette API est spécifiquement conçue pour l'application mobile.
 
 ⚠️ **Important:** L'app mobile ne doit PAS se connecter directement à Supabase. Tous les appels doivent passer par ces endpoints API.
+
+## 🔐 **AUTHENTIFICATION - Guide complet**
+
+### 🚫 **Endpoints SANS authentification :**
+- \`POST /api/auth/magic-link\` - Demander un Magic Link
+- \`GET /api/auth/ws-complete\` - WebSocket complet (Magic Link + Token)
+
+### ✅ **Endpoints AVEC authentification :**
+Tous les autres endpoints nécessitent un **Bearer Token** dans le header :
+
+\`\`\`javascript
+headers: {
+  'Authorization': 'Bearer ' + authToken,
+  'Content-Type': 'application/json'
+}
+\`\`\`
+
+### 🎯 **Comment obtenir le token :**
+1. **Utiliser le WebSocket COMPLET** (recommandé) :
+   \`\`\`javascript
+   const eventSource = new EventSource(
+     \`https://dibs-poc0.vercel.app/api/auth/ws-complete?email=\${email}\`
+   )
+   // Le token arrive automatiquement dans data.session.access_token
+   \`\`\`
+
+2. **Ou utiliser Magic Link + Supabase WebSocket** :
+   \`\`\`javascript
+   // 1. Demander Magic Link
+   await fetch('/api/auth/magic-link', { 
+     method: 'POST', 
+     body: JSON.stringify({email}) 
+   })
+   
+   // 2. Écouter avec Supabase
+   supabase.auth.onAuthStateChange((event, session) => {
+     if (session) {
+       const token = session.access_token
+       // Utiliser ce token pour les autres appels
+     }
+   })
+   \`\`\`
+
+### 🔄 **Gestion automatique du token (Axios) :**
+\`\`\`javascript
+import axios from 'axios'
+
+// Intercepteur pour ajouter automatiquement le token
+axios.interceptors.request.use((config) => {
+  const token = AsyncStorage.getItem('auth_token')
+  if (token) {
+    config.headers.Authorization = \`Bearer \${token}\`
+  }
+  return config
+})
+
+// Intercepteur pour gérer l'expiration du token
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      // Token expiré - rediriger vers login
+      AsyncStorage.removeItem('auth_token')
+      navigation.navigate('Login')
+    }
+    return Promise.reject(error)
+  }
+)
+\`\`\`
 
 ## 🔐 Authentication Magic Link (WebSocket COMPLET)
 
@@ -283,7 +352,10 @@ const checkAuthStatus = async () => {
         post: {
           tags: ['Auth'],
           summary: '🔐 P0 - Envoyer un Magic Link',
-          description: '**CRITIQUE** - Envoie un lien de connexion (Magic Link) par email à l\'utilisateur. L\'utilisateur clique sur le lien pour se connecter automatiquement.',
+          description: `**CRITIQUE** - Envoie un lien de connexion (Magic Link) par email à l'utilisateur. L'utilisateur clique sur le lien pour se connecter automatiquement.
+
+## 🔐 **AUTHENTIFICATION REQUISE : NON** 
+❌ **Pas d'authentification nécessaire** - Cet endpoint sert à demander un Magic Link pour se connecter !`,
           'x-priority': 'P0',
           security: [], // Pas d'auth requise pour demander un Magic Link
           requestBody: {
@@ -375,6 +447,9 @@ const checkAuthStatus = async () => {
           summary: '🚀 P0 - WebSocket COMPLET (Magic Link + Token automatique)',
           description: `**CRITIQUE** - WebSocket tout-en-un : envoie le Magic Link ET renvoie le token automatiquement !
 
+## 🔐 **AUTHENTIFICATION REQUISE : NON** 
+❌ **Pas d'authentification nécessaire** - Ce WebSocket sert justement à obtenir le token d'authentification !
+
 ## 🚀 WebSocket COMPLET - Tout automatique !
 
 Ce WebSocket fait TOUT en une seule connexion :
@@ -382,10 +457,10 @@ Ce WebSocket fait TOUT en une seule connexion :
 2. **Attend que l'utilisateur clique** sur le lien
 3. **Renvoie automatiquement le token** quand l'utilisateur se connecte
 
-### ⚡ Utilisation ULTRA SIMPLE
+### ⚡ Utilisation ULTRA SIMPLE (SANS TOKEN)
 
 \`\`\`javascript
-// 1 seule ligne pour tout faire !
+// 1 seule ligne pour tout faire - AUCUN TOKEN REQUIS !
 const eventSource = new EventSource(
   \`https://dibs-poc0.vercel.app/api/auth/ws-complete?email=\${email}\`
 )
@@ -646,7 +721,21 @@ const LoginScreen = ({ navigation }) => {
         get: {
           tags: ['Auth'],
           summary: '👤 P0 - Obtenir l\'utilisateur actuel',
-          description: '**CRITIQUE** - Récupère les informations de l\'utilisateur actuellement connecté.',
+          description: `**CRITIQUE** - Récupère les informations de l'utilisateur actuellement connecté.
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec token :
+\`\`\`javascript
+const response = await fetch('https://dibs-poc0.vercel.app/api/auth/me', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer ' + authToken,
+    'Content-Type': 'application/json'
+  }
+})
+\`\`\``,
           'x-priority': 'P0',
           responses: {
             200: {
@@ -697,7 +786,21 @@ const LoginScreen = ({ navigation }) => {
         post: {
           tags: ['Auth'],
           summary: '🚪 P0 - Déconnexion',
-          description: '**CRITIQUE** - Déconnecte l\'utilisateur et invalide sa session.',
+          description: `**CRITIQUE** - Déconnecte l'utilisateur et invalide sa session.
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec token :
+\`\`\`javascript
+const response = await fetch('https://dibs-poc0.vercel.app/api/auth/logout', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer ' + authToken,
+    'Content-Type': 'application/json'
+  }
+})
+\`\`\``,
           'x-priority': 'P0',
           responses: {
             200: {
@@ -728,7 +831,21 @@ const LoginScreen = ({ navigation }) => {
         get: {
           tags: ['User'],
           summary: '👤 P0 - Obtenir le profil utilisateur',
-          description: '**CRITIQUE** - Récupère le profil complet de l\'utilisateur connecté.',
+          description: `**CRITIQUE** - Récupère le profil complet de l'utilisateur connecté.
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec token :
+\`\`\`javascript
+const response = await fetch('https://dibs-poc0.vercel.app/api/user/profile', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer ' + authToken,
+    'Content-Type': 'application/json'
+  }
+})
+\`\`\``,
           'x-priority': 'P0',
           responses: {
             200: {
@@ -772,7 +889,10 @@ const LoginScreen = ({ navigation }) => {
         put: {
           tags: ['User'],
           summary: '✏️ P1 - Mettre à jour le profil',
-          description: 'Met à jour les informations du profil utilisateur.',
+          description: `Met à jour les informations du profil utilisateur.
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\``,
           'x-priority': 'P1',
           requestBody: {
             required: true,
@@ -885,7 +1005,22 @@ const LoginScreen = ({ navigation }) => {
         get: {
           tags: ['User'],
           summary: '📊 P0 - Statistiques utilisateur',
-          description: '**CRITIQUE** - Récupère les statistiques de l\'utilisateur (artistes, points, événements, scans).',
+          description: `**CRITIQUE** - Récupère les statistiques de l'utilisateur (artistes, points, événements, scans).
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec token :
+\`\`\`javascript
+const response = await fetch('https://dibs-poc0.vercel.app/api/user/stats', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer ' + authToken,
+    'Content-Type': 'application/json'
+  }
+})
+\`\`\``,
+
           'x-priority': 'P0',
           responses: {
             200: {
@@ -928,7 +1063,21 @@ const LoginScreen = ({ navigation }) => {
         get: {
           tags: ['Artists'],
           summary: '🎵 P0 - Artistes de l\'utilisateur',
-          description: '**CRITIQUE** - Récupère la liste des artistes suivis par l\'utilisateur avec pagination.',
+          description: `**CRITIQUE** - Récupère la liste des artistes suivis par l'utilisateur avec pagination.
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec token et pagination :
+\`\`\`javascript
+const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists?page=1&limit=10', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer ' + authToken,
+    'Content-Type': 'application/json'
+  }
+})
+\`\`\``,
           'x-priority': 'P0',
           parameters: [
             {
@@ -1015,7 +1164,25 @@ const LoginScreen = ({ navigation }) => {
         post: {
           tags: ['Artists'],
           summary: '💾 P0 - Sauvegarder les artistes sélectionnés',
-          description: '**CRITIQUE** - Sauvegarde la liste des artistes sélectionnés par l\'utilisateur.',
+          description: `**CRITIQUE** - Sauvegarde la liste des artistes sélectionnés par l'utilisateur.
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec token :
+\`\`\`javascript
+const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists/save', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer ' + authToken,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    artistIds: ['uuid1', 'uuid2']
+  })
+})
+\`\`\``,
+
           'x-priority': 'P0',
           requestBody: {
             required: true,
@@ -1275,7 +1442,24 @@ const LoginScreen = ({ navigation }) => {
         post: {
           tags: ['QR'],
           summary: '📱 P0 - Scanner un QR code',
-          description: '**CRITIQUE** - Scanne un QR code et attribue des points à l\'utilisateur.',
+          description: `**CRITIQUE** - Scanne un QR code et attribue des points à l'utilisateur.
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec token :
+\`\`\`javascript
+const response = await fetch('https://dibs-poc0.vercel.app/api/qr/scan', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer ' + authToken,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    qrCode: 'ALBUM_MAYHEM_2024'
+  })
+})
+\`\`\``,
           'x-priority': 'P0',
           requestBody: {
             required: true,
