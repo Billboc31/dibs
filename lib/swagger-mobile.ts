@@ -1263,6 +1263,279 @@ const LoginScreen = ({ navigation }) => {
           }
         }
       },
+      '/api/auth/ws-complete': {
+        get: {
+          tags: ['Auth'],
+          summary: '🚀 P0 - WebSocket COMPLET (Magic Link + Token automatique)',
+          description: `**CRITIQUE** - WebSocket tout-en-un : envoie le Magic Link ET renvoie le token automatiquement !
+
+## 🚀 WebSocket COMPLET - Tout automatique !
+
+Ce WebSocket fait TOUT en une seule connexion :
+1. **Envoie automatiquement le Magic Link** dès la connexion
+2. **Attend que l'utilisateur clique** sur le lien
+3. **Renvoie automatiquement le token** quand l'utilisateur se connecte
+
+### ⚡ Utilisation ULTRA SIMPLE
+
+\`\`\`javascript
+// 1 seule ligne pour tout faire !
+const eventSource = new EventSource(
+  \`https://dibs-poc0.vercel.app/api/auth/ws-complete?email=\${email}\`
+)
+
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data)
+  console.log('Step', data.step, ':', data.message)
+  
+  switch (data.status) {
+    case 'connected':
+      // Step 1: WebSocket connecté
+      console.log('✅ WebSocket connecté')
+      break
+      
+    case 'sending_magic_link':
+      // Step 2: Envoi du Magic Link en cours
+      console.log('📧 Envoi du Magic Link...')
+      break
+      
+    case 'magic_link_sent':
+      // Step 3: Magic Link envoyé
+      console.log('✅ Magic Link envoyé !', data.message_id)
+      Alert.alert('Email envoyé !', 'Cliquez sur le lien dans votre email.')
+      break
+      
+    case 'waiting_for_click':
+      // Step 4: En attente du clic
+      console.log('⏳ En attente du clic sur le Magic Link...')
+      break
+      
+    case 'authenticated':
+      // Step 5: TOKEN REÇU !
+      console.log('🎉 TOKEN REÇU !', data.session.access_token)
+      
+      // Sauvegarder le token
+      AsyncStorage.setItem('auth_token', data.session.access_token)
+      AsyncStorage.setItem('refresh_token', data.session.refresh_token)
+      
+      // Rediriger vers l'app
+      Alert.alert('Connexion réussie !', 'Vous êtes connecté !')
+      navigation.navigate('Home')
+      
+      eventSource.close()
+      break
+      
+    case 'error':
+      console.error('❌ Erreur:', data.error)
+      Alert.alert('Erreur', data.message)
+      eventSource.close()
+      break
+  }
+}
+\`\`\`
+
+## 📱 Exemple complet React Native
+
+\`\`\`javascript
+// LoginScreen avec WebSocket COMPLET
+const LoginScreen = ({ navigation }) => {
+  const [email, setEmail] = useState('')
+  const [status, setStatus] = useState('')
+  const [step, setStep] = useState(0)
+  const [isActive, setIsActive] = useState(false)
+  const eventSourceRef = useRef(null)
+  
+  const handleCompleteLogin = () => {
+    if (!email) {
+      Alert.alert('Erreur', 'Saisissez votre email')
+      return
+    }
+    
+    // Connexion au WebSocket COMPLET
+    const eventSource = new EventSource(
+      \`https://dibs-poc0.vercel.app/api/auth/ws-complete?email=\${encodeURIComponent(email)}\`
+    )
+    
+    eventSourceRef.current = eventSource
+    setIsActive(true)
+    
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      setStep(data.step || 0)
+      setStatus(data.message)
+      
+      switch (data.status) {
+        case 'magic_link_sent':
+          Alert.alert('Email envoyé ! 📧', 'Cliquez sur le lien dans votre email.')
+          break
+          
+        case 'authenticated':
+          // TOKEN AUTOMATIQUEMENT REÇU !
+          AsyncStorage.setItem('auth_token', data.session.access_token)
+          Alert.alert('Connexion réussie ! 🎉', 'Vous êtes maintenant connecté.')
+          navigation.navigate('Home')
+          eventSource.close()
+          setIsActive(false)
+          break
+          
+        case 'error':
+          Alert.alert('Erreur', data.message)
+          eventSource.close()
+          setIsActive(false)
+          break
+      }
+    }
+    
+    eventSource.onerror = () => {
+      setStatus('Erreur de connexion WebSocket')
+      setIsActive(false)
+    }
+  }
+  
+  const handleCancel = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+    }
+    setIsActive(false)
+    setStatus('')
+    setStep(0)
+  }
+  
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>DIBS - WebSocket Complet</Text>
+      
+      {!isActive ? (
+        <>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Votre email"
+            keyboardType="email-address"
+          />
+          <TouchableOpacity onPress={handleCompleteLogin}>
+            <Text>🚀 Connexion Automatique Complète</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View>
+          <Text>WebSocket Actif - Étape {step}/5</Text>
+          <Text>{status}</Text>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <TouchableOpacity onPress={handleCancel}>
+            <Text>Annuler</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  )
+}
+\`\`\`
+
+## 🔄 Flow complet automatique
+
+\`\`\`
+1. App → Connexion WebSocket (/api/auth/ws-complete?email=...)
+2. WebSocket → Envoie automatiquement le Magic Link
+3. WebSocket → "magic_link_sent" (avec message_id)
+4. Utilisateur → Clique sur le lien dans l'email
+5. Callback → Vérifie le Magic Link et envoie le token au WebSocket
+6. WebSocket → "authenticated" avec access_token + refresh_token
+7. App → Sauvegarde le token et redirige vers Home
+\`\`\`
+
+## ⚡ Avantages du WebSocket COMPLET
+
+- ✅ **Tout automatique** - Magic Link + Token en une connexion
+- ✅ **Pas d'étapes manuelles** - L'utilisateur clique juste sur le lien
+- ✅ **Token direct** - Pas besoin de \`supabase.auth.getSession()\`
+- ✅ **Steps clairs** - Suivi étape par étape (1 à 5)
+- ✅ **Gestion d'erreurs** - Erreurs détaillées à chaque étape
+- ✅ **Fermeture auto** - Se ferme après authentification
+
+## 🎯 Messages WebSocket Complet
+
+- **Step 1** - \`connected\` : WebSocket connecté
+- **Step 2** - \`sending_magic_link\` : Envoi Magic Link en cours
+- **Step 3** - \`magic_link_sent\` : Magic Link envoyé (avec message_id)
+- **Step 4** - \`waiting_for_click\` : En attente du clic
+- **Step 5** - \`authenticated\` : TOKEN REÇU ! (avec session complète)
+- **Error** - \`error\` : Erreur à n'importe quelle étape`,
+          'x-priority': 'P0',
+          parameters: [
+            {
+              name: 'email',
+              in: 'query',
+              required: true,
+              description: 'Email de l\'utilisateur',
+              schema: { type: 'string', format: 'email', example: 'user@example.com' }
+            }
+          ],
+          responses: {
+            200: {
+              description: 'WebSocket complet - Magic Link + Token automatique',
+              content: {
+                'text/event-stream': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      step: { type: 'integer', minimum: 1, maximum: 5, example: 5 },
+                      status: { 
+                        type: 'string', 
+                        enum: ['connected', 'sending_magic_link', 'magic_link_sent', 'waiting_for_click', 'authenticated', 'error'],
+                        example: 'authenticated' 
+                      },
+                      message: { type: 'string', example: 'Authentification réussie ! Token envoyé à l\'app mobile.' },
+                      email: { type: 'string', format: 'email', example: 'user@example.com' },
+                      message_id: { type: 'string', nullable: true, example: 'msg_123456' },
+                      redirect_to: { type: 'string', nullable: true, example: 'https://dibs-poc0.vercel.app/auth/callback-ws?email=user@example.com' },
+                      user: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string', format: 'uuid' },
+                          email: { type: 'string', format: 'email' },
+                          display_name: { type: 'string', nullable: true },
+                          avatar_url: { type: 'string', nullable: true },
+                          created_at: { type: 'string', format: 'date-time' }
+                        }
+                      },
+                      session: {
+                        type: 'object',
+                        properties: {
+                          access_token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                          refresh_token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                          expires_at: { type: 'integer', example: 1737894600 },
+                          expires_in: { type: 'integer', example: 3600 }
+                        }
+                      },
+                      timestamp: { type: 'string', format: 'date-time' }
+                    }
+                  },
+                  example: {
+                    step: 5,
+                    status: 'authenticated',
+                    message: 'Authentification réussie ! Token envoyé à l\'app mobile.',
+                    email: 'user@example.com',
+                    user: {
+                      id: '550e8400-e29b-41d4-a716-446655440000',
+                      email: 'user@example.com',
+                      display_name: 'John Doe',
+                      created_at: '2025-11-26T17:30:00Z'
+                    },
+                    session: {
+                      access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                      refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                      expires_at: 1737894600,
+                      expires_in: 3600
+                    },
+                    timestamp: '2025-11-26T17:30:00Z'
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
 
       // === USER PROFILE ===
       '/api/user/profile': {
