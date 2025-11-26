@@ -42,7 +42,25 @@ if (session) {
 }
 \`\`\`
 
-### 4. Utiliser le token pour les autres endpoints
+### 4. Écouter la connexion en temps réel (WebSocket)
+\`\`\`javascript
+// Écouter les changements d'authentification en temps réel
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN' && session) {
+    // L'utilisateur vient de se connecter !
+    const token = session.access_token
+    console.log('Utilisateur connecté automatiquement !', token)
+    
+    // Sauvegarder le token
+    AsyncStorage.setItem('auth_token', token)
+    
+    // Rediriger vers l'écran principal
+    navigation.navigate('Home')
+  }
+})
+\`\`\`
+
+### 5. Utiliser le token pour les autres endpoints
 \`\`\`javascript
 // Headers pour tous les autres appels API
 const headers = {
@@ -110,7 +128,51 @@ const loginWithMagicLink = async (email) => {
   }
 }
 
-// 3. Vérifier si l'utilisateur est connecté (SIMPLE)
+// 3. Écouter l'authentification en temps réel (AUTOMATIQUE)
+const setupAuthListener = () => {
+  // Écouter les changements d'état d'authentification
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    async (event, session) => {
+      console.log('Auth event:', event, session)
+      
+      if (event === 'SIGNED_IN' && session) {
+        // L'utilisateur vient de se connecter via Magic Link !
+        const token = session.access_token
+        
+        console.log('✅ Connexion automatique détectée !', token)
+        
+        // Sauvegarder le token
+        await AsyncStorage.setItem('auth_token', token)
+        await AsyncStorage.setItem('refresh_token', session.refresh_token)
+        
+        // Mettre à jour l'état de l'app
+        setUser(session.user)
+        setToken(token)
+        
+        // Rediriger automatiquement vers l'écran principal
+        Alert.alert('Connexion réussie !', 'Vous êtes maintenant connecté.')
+        navigation.navigate('Home')
+        
+      } else if (event === 'SIGNED_OUT') {
+        // L'utilisateur s'est déconnecté
+        console.log('🚪 Déconnexion détectée')
+        
+        await AsyncStorage.removeItem('auth_token')
+        await AsyncStorage.removeItem('refresh_token')
+        
+        setUser(null)
+        setToken(null)
+        
+        navigation.navigate('Login')
+      }
+    }
+  )
+  
+  // Retourner la fonction de nettoyage
+  return () => subscription.unsubscribe()
+}
+
+// 4. Vérifier la session actuelle (au démarrage de l'app)
 const checkAuthStatus = async () => {
   try {
     const { data: { session }, error } = await supabase.auth.getSession()
@@ -121,9 +183,9 @@ const checkAuthStatus = async () => {
     }
     
     if (session) {
-      // Utilisateur connecté !
+      // Utilisateur déjà connecté !
       const token = session.access_token
-      console.log('Token récupéré:', token)
+      console.log('Token existant récupéré:', token)
       
       // Sauvegarder le token pour les appels API
       await AsyncStorage.setItem('auth_token', token)
@@ -371,6 +433,282 @@ const checkAuthStatus = async () => {
                         properties: {
                           message: { type: 'string', example: 'Logged out successfully' }
                         }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/auth/ws': {
+        get: {
+          tags: ['Auth'],
+          summary: '🔄 P0 - WebSocket Authentification en temps réel',
+          description: `**CRITIQUE** - Écoute les changements d'authentification en temps réel via Supabase.
+
+## 🚀 Utilisation avec Supabase (RECOMMANDÉ)
+
+\`\`\`javascript
+// Écouter les changements d'authentification en temps réel
+const { data: { subscription } } = supabase.auth.onAuthStateChange(
+  async (event, session) => {
+    console.log('Auth event:', event, session)
+    
+    if (event === 'SIGNED_IN' && session) {
+      // L'utilisateur vient de se connecter via Magic Link !
+      const token = session.access_token
+      
+      console.log('✅ Connexion automatique détectée !', token)
+      
+      // Sauvegarder le token
+      await AsyncStorage.setItem('auth_token', token)
+      
+      // Rediriger automatiquement
+      navigation.navigate('Home')
+    }
+  }
+)
+
+// N'oubliez pas de nettoyer l'abonnement
+return () => subscription.unsubscribe()
+\`\`\`
+
+## 📱 Exemple complet React Native
+
+\`\`\`javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+
+const useAuth = () => {
+  const [user, setUser] = useState(null)
+  const [token, setToken] = useState(null)
+  const [loading, setLoading] = useState(true)
+  
+  useEffect(() => {
+    // Vérifier la session actuelle au démarrage
+    const getInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        setUser(session.user)
+        setToken(session.access_token)
+        await AsyncStorage.setItem('auth_token', session.access_token)
+      }
+      setLoading(false)
+    }
+    
+    getInitialSession()
+    
+    // Écouter les changements d'authentification
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event)
+        
+        if (event === 'SIGNED_IN' && session) {
+          setUser(session.user)
+          setToken(session.access_token)
+          await AsyncStorage.setItem('auth_token', session.access_token)
+          
+          // Notification de connexion réussie
+          Alert.alert('Connexion réussie !', 'Vous êtes maintenant connecté.')
+          
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null)
+          setToken(null)
+          await AsyncStorage.removeItem('auth_token')
+        }
+        
+        setLoading(false)
+      }
+    )
+    
+    return () => subscription.unsubscribe()
+  }, [])
+  
+  return { user, token, loading }
+}
+
+// Utilisation dans un composant
+const App = () => {
+  const { user, token, loading } = useAuth()
+  
+  if (loading) {
+    return <LoadingScreen />
+  }
+  
+  return user ? <MainApp /> : <LoginScreen />
+}
+\`\`\`
+
+## 📱 Écran de connexion avec WebSocket
+
+\`\`\`javascript
+// LoginScreen.js - Connexion automatique avec WebSocket
+import React, { useState, useEffect } from 'react'
+import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native'
+import { supabase } from '../lib/supabase'
+
+const LoginScreen = ({ navigation }) => {
+  const [email, setEmail] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [isWaitingForAuth, setIsWaitingForAuth] = useState(false)
+  
+  // Configurer l'écoute WebSocket au montage du composant
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth event reçu:', event)
+        
+        if (event === 'SIGNED_IN' && session) {
+          // L'utilisateur vient de se connecter !
+          console.log('✅ Connexion automatique via Magic Link !')
+          
+          setIsWaitingForAuth(false)
+          
+          // Sauvegarder le token
+          await AsyncStorage.setItem('auth_token', session.access_token)
+          
+          // Afficher une notification de succès
+          Alert.alert(
+            'Connexion réussie ! 🎉', 
+            'Vous êtes maintenant connecté à DIBS.',
+            [{ text: 'Continuer', onPress: () => navigation.navigate('Home') }]
+          )
+        }
+      }
+    )
+    
+    // Nettoyer l'abonnement au démontage
+    return () => subscription.unsubscribe()
+  }, [navigation])
+  
+  // Envoyer le Magic Link
+  const handleSendMagicLink = async () => {
+    if (!email) {
+      Alert.alert('Erreur', 'Veuillez saisir votre email')
+      return
+    }
+    
+    setIsLoading(true)
+    
+    try {
+      const response = await fetch('https://dibs-poc0.vercel.app/api/auth/magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setIsWaitingForAuth(true)
+        Alert.alert(
+          'Email envoyé ! 📧', 
+          'Cliquez sur le lien dans votre email. La connexion se fera automatiquement.',
+          [{ text: 'OK' }]
+        )
+      } else {
+        Alert.alert('Erreur', result.error)
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible d\'envoyer l\'email')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Connexion DIBS</Text>
+      
+      {!isWaitingForAuth ? (
+        <>
+          <TextInput
+            style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Votre email"
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          
+          <TouchableOpacity 
+            style={styles.button} 
+            onPress={handleSendMagicLink}
+            disabled={isLoading}
+          >
+            <Text style={styles.buttonText}>
+              {isLoading ? 'Envoi...' : 'Envoyer Magic Link'}
+            </Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View style={styles.waitingContainer}>
+          <Text style={styles.waitingTitle}>En attente de connexion...</Text>
+          <Text style={styles.waitingText}>
+            Cliquez sur le lien dans votre email.{'\n'}
+            La connexion se fera automatiquement ! ⚡
+          </Text>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      )}
+    </View>
+  )
+}
+\`\`\`
+
+## ⚡ Avantages du WebSocket Supabase
+
+- ✅ **Automatique** - Pas besoin d'appuyer sur "Vérifier"
+- ✅ **Temps réel** - Connexion instantanée après clic sur Magic Link
+- ✅ **Fiable** - Géré nativement par Supabase
+- ✅ **Simple** - Pas de serveur WebSocket à maintenir
+- ✅ **Sécurisé** - Authentification gérée par Supabase
+
+## 🔧 Events disponibles
+
+- \`SIGNED_IN\` - Utilisateur connecté
+- \`SIGNED_OUT\` - Utilisateur déconnecté  
+- \`TOKEN_REFRESHED\` - Token rafraîchi
+- \`USER_UPDATED\` - Profil utilisateur mis à jour`,
+          'x-priority': 'P0',
+          responses: {
+            101: {
+              description: 'WebSocket connection établie via Supabase Auth',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      event: { 
+                        type: 'string', 
+                        enum: ['SIGNED_IN', 'SIGNED_OUT', 'TOKEN_REFRESHED', 'USER_UPDATED'],
+                        example: 'SIGNED_IN' 
+                      },
+                      session: {
+                        type: 'object',
+                        properties: {
+                          access_token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                          refresh_token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                          expires_at: { type: 'integer', example: 1737894600 },
+                          expires_in: { type: 'integer', example: 3600 },
+                          user: { $ref: '#/components/schemas/User' }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    event: 'SIGNED_IN',
+                    session: {
+                      access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                      refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                      expires_at: 1737894600,
+                      expires_in: 3600,
+                      user: {
+                        id: '550e8400-e29b-41d4-a716-446655440000',
+                        email: 'user@example.com',
+                        display_name: 'John Doe'
                       }
                     }
                   }
