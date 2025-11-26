@@ -204,11 +204,12 @@ export default function AuthCallbackWS() {
           sessionData = data
         }
 
-        if (sessionData?.user && sessionData?.session) {
+        if ((sessionData?.user || sessionData?.session?.user) && sessionData?.session) {
           clearTimeout(timeoutId) // Annuler le timeout
           setStatus('Authentification réussie ! Envoi du token...')
           
-          console.log('✅ Session établie pour:', sessionData.user.email)
+          const user = sessionData.user || sessionData.session.user
+          console.log('✅ Session établie pour:', user.email)
           console.log('🎯 Token access:', sessionData.session.access_token?.substring(0, 20) + '...')
           console.log('🔄 Token refresh:', sessionData.session.refresh_token?.substring(0, 20) + '...')
           
@@ -223,11 +224,11 @@ export default function AuthCallbackWS() {
               status: 'authenticated',
               message: 'Authentification réussie ! Token envoyé à l\'app mobile.',
               user: {
-                id: sessionData.user.id,
-                email: sessionData.user.email,
-                display_name: sessionData.user.user_metadata?.display_name || null,
-                avatar_url: sessionData.user.user_metadata?.avatar_url || null,
-                created_at: sessionData.user.created_at
+                id: user.id,
+                email: user.email,
+                display_name: user.user_metadata?.display_name || null,
+                avatar_url: user.user_metadata?.avatar_url || null,
+                created_at: user.created_at
               },
               session: {
                 access_token: sessionData.session.access_token,
@@ -262,8 +263,9 @@ export default function AuthCallbackWS() {
           setDebugInfo(prev => ({
             ...prev,
             sessionData,
-            hasUser: !!sessionData?.user,
-            hasSession: !!sessionData?.session
+            hasUser: !!(sessionData?.user || sessionData?.session?.user),
+            hasSession: !!sessionData?.session,
+            userLocation: sessionData?.user ? 'sessionData.user' : sessionData?.session?.user ? 'sessionData.session.user' : 'not found'
           }))
         }
 
