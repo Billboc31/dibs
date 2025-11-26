@@ -8,11 +8,11 @@ const options: any = {
       version: '1.0.0',
       description: `📱 **API d'authentification Magic Link pour l'application mobile DIBS**
 
-Cette API utilise uniquement l'authentification par Magic Link (lien de connexion par email).
+Cette API utilise uniquement l'authentification par Magic Link (lien de connexion par email) **SANS deep links compliqués**.
 
-## 🔐 Authentication Magic Link
+## 🔐 Authentication Magic Link (Simple)
 
-L'authentification se fait en 2 étapes :
+L'authentification se fait en 2 étapes simples :
 
 ### 1. Demander un Magic Link
 \`\`\`javascript
@@ -20,18 +20,27 @@ const response = await fetch('/api/auth/magic-link', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    email: 'user@example.com',
-    redirectTo: 'dibs://auth/callback' // Deep link mobile
+    email: 'user@example.com'
   })
 })
 \`\`\`
 
 ### 2. L'utilisateur clique sur le lien dans son email
-- Le lien redirige vers votre app mobile
-- Supabase gère automatiquement l'authentification
-- Récupérez le token avec \`supabase.auth.getSession()\`
+- Le lien ouvre une page web qui confirme l'authentification
+- **Pas de deep links compliqués !**
+- L'utilisateur revient dans l'app et utilise Supabase directement
 
-### 3. Utiliser le token pour les autres endpoints
+### 3. Récupérer la session dans l'app mobile
+\`\`\`javascript
+// Dans l'app mobile après que l'utilisateur ait cliqué sur le lien
+const { data: { session } } = await supabase.auth.getSession()
+if (session) {
+  // Utilisateur connecté !
+  const token = session.access_token
+}
+\`\`\`
+
+### 4. Utiliser le token pour les autres endpoints
 \`\`\`javascript
 // Headers pour tous les autres appels API
 const headers = {
@@ -58,11 +67,11 @@ const headers = {
 }
 \`\`\`
 
-## 🚀 Exemple complet React Native/Expo
+## 🚀 Exemple complet React Native/Expo (SIMPLE)
 
 \`\`\`javascript
 import { createClient } from '@supabase/supabase-js'
-import * as Linking from 'expo-linking'
+import { Alert } from 'react-native'
 
 // 1. Configuration Supabase
 const supabase = createClient(
@@ -70,48 +79,101 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
 )
 
-// 2. Fonction de connexion Magic Link
+// 2. Fonction de connexion Magic Link (SIMPLE)
 const loginWithMagicLink = async (email) => {
   try {
     // Demander le Magic Link via l'API
     const response = await fetch('https://dibs-poc0.vercel.app/api/auth/magic-link', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: email,
-        redirectTo: 'dibs://auth/callback'
-      })
+      body: JSON.stringify({ email: email })
     })
     
     const result = await response.json()
     
     if (result.success) {
-      Alert.alert('Email envoyé !', 'Vérifiez votre boîte email et cliquez sur le lien.')
+      Alert.alert(
+        'Email envoyé !', 
+        'Vérifiez votre boîte email et cliquez sur le lien. Puis revenez dans l\'app et appuyez sur "Vérifier".'
+      )
     }
   } catch (error) {
     console.error('Erreur Magic Link:', error)
   }
 }
 
-// 3. Gérer le deep link de retour
-useEffect(() => {
-  const handleDeepLink = (url) => {
-    if (url.includes('access_token')) {
-      // L'utilisateur a cliqué sur le Magic Link
-      // Supabase gère automatiquement l'authentification
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          // Utilisateur connecté !
-          const token = session.access_token
-          // Sauvegarder le token et naviguer vers l'app
-        }
-      })
+// 3. Vérifier si l'utilisateur est connecté (SIMPLE)
+const checkAuthStatus = async () => {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession()
+    
+    if (error) {
+      console.error('Erreur session:', error)
+      return null
+    }
+    
+    if (session) {
+      // Utilisateur connecté !
+      const token = session.access_token
+      console.log('Token récupéré:', token)
+      
+      // Sauvegarder le token pour les appels API
+      await AsyncStorage.setItem('auth_token', token)
+      
+      return {
+        user: session.user,
+        token: token
+      }
+    }
+    
+    return null
+  } catch (error) {
+    console.error('Erreur vérification auth:', error)
+    return null
+  }
+}
+
+// 4. Utilisation dans un composant
+const LoginScreen = () => {
+  const [email, setEmail] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  
+  const handleLogin = async () => {
+    setIsLoading(true)
+    await loginWithMagicLink(email)
+    setIsLoading(false)
+  }
+  
+  const handleCheckAuth = async () => {
+    const authData = await checkAuthStatus()
+    if (authData) {
+      // Rediriger vers l'écran principal
+      navigation.navigate('Home')
+    } else {
+      Alert.alert('Pas encore connecté', 'Cliquez d\'abord sur le lien dans votre email.')
     }
   }
   
-  Linking.addEventListener('url', handleDeepLink)
-  return () => Linking.removeEventListener('url', handleDeepLink)
-}, [])
+  return (
+    <View>
+      <TextInput 
+        value={email} 
+        onChangeText={setEmail}
+        placeholder="Votre email"
+        keyboardType="email-address"
+      />
+      <Button 
+        title="Envoyer Magic Link" 
+        onPress={handleLogin}
+        disabled={isLoading}
+      />
+      <Button 
+        title="Vérifier si connecté" 
+        onPress={handleCheckAuth}
+      />
+    </View>
+  )
+}
 \`\`\`
 `,
       contact: {
@@ -189,17 +251,11 @@ useEffect(() => {
                       format: 'email', 
                       example: 'user@example.com',
                       description: 'Email de l\'utilisateur'
-                    },
-                    redirectTo: { 
-                      type: 'string', 
-                      example: 'dibs://auth/callback',
-                      description: 'URL de redirection après connexion (deep link mobile)'
                     }
                   }
                 },
                 example: {
-                  email: 'user@example.com',
-                  redirectTo: 'dibs://auth/callback'
+                  email: 'user@example.com'
                 }
               }
             }
@@ -216,10 +272,10 @@ useEffect(() => {
                       data: {
                         type: 'object',
                         properties: {
-                          message: { type: 'string', example: 'Magic link sent successfully' },
+                          message: { type: 'string', example: 'Magic Link envoyé ! Cliquez sur le lien dans votre email pour vous connecter.' },
                           email: { type: 'string', example: 'user@example.com' },
                           message_id: { type: 'string', nullable: true, example: 'msg_123456' },
-                          redirect_to: { type: 'string', example: 'dibs://auth/callback' }
+                          instructions: { type: 'string', example: 'L\'utilisateur doit cliquer sur le lien dans l\'email. Supabase gérera automatiquement l\'authentification.' }
                         }
                       }
                     }
@@ -227,10 +283,10 @@ useEffect(() => {
                   example: {
                     success: true,
                     data: {
-                      message: 'Magic link sent successfully',
+                      message: 'Magic Link envoyé ! Cliquez sur le lien dans votre email pour vous connecter.',
                       email: 'user@example.com',
                       message_id: 'msg_123456',
-                      redirect_to: 'dibs://auth/callback'
+                      instructions: 'L\'utilisateur doit cliquer sur le lien dans l\'email. Supabase gérera automatiquement l\'authentification.'
                     }
                   }
                 }
@@ -305,6 +361,100 @@ useEffect(() => {
             },
             401: {
               description: 'Non authentifié',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Error' }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/auth/verify-otp': {
+        post: {
+          tags: ['Auth'],
+          summary: '🔢 P2 - Vérifier un code OTP (Optionnel)',
+          description: '**OPTIONNEL** - Vérifie un code OTP reçu par email. Alternative si les Magic Links ne fonctionnent pas.',
+          'x-priority': 'P2',
+          security: [], // Pas d'auth requise pour vérifier un OTP
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['email', 'token'],
+                  properties: {
+                    email: { 
+                      type: 'string', 
+                      format: 'email', 
+                      example: 'user@example.com',
+                      description: 'Email de l\'utilisateur'
+                    },
+                    token: { 
+                      type: 'string', 
+                      example: '123456',
+                      description: 'Code OTP reçu par email'
+                    }
+                  }
+                },
+                example: {
+                  email: 'user@example.com',
+                  token: '123456'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'OTP vérifié avec succès',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          user: { $ref: '#/components/schemas/User' },
+                          session: {
+                            type: 'object',
+                            properties: {
+                              access_token: { type: 'string' },
+                              refresh_token: { type: 'string' },
+                              expires_at: { type: 'integer' },
+                              expires_in: { type: 'integer' }
+                            }
+                          },
+                          message: { type: 'string', example: 'Connexion réussie !' }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      user: {
+                        id: '550e8400-e29b-41d4-a716-446655440000',
+                        email: 'user@example.com',
+                        display_name: null,
+                        created_at: '2025-01-15T10:30:00Z'
+                      },
+                      session: {
+                        access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                        refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                        expires_at: 1737894600,
+                        expires_in: 3600
+                      },
+                      message: 'Connexion réussie !'
+                    }
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Code OTP invalide ou expiré',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/Error' }
