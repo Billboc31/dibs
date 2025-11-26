@@ -392,3 +392,4 @@ const debugAuth = async () => {
 ```
 
 Cette approche est **beaucoup plus simple** et évite tous les problèmes de deep links !
+

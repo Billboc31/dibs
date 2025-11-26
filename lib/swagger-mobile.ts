@@ -445,8 +445,213 @@ const checkAuthStatus = async () => {
       '/api/auth/ws': {
         get: {
           tags: ['Auth'],
-          summary: '🔄 P0 - WebSocket Authentification en temps réel',
-          description: `**CRITIQUE** - Écoute les changements d'authentification en temps réel via Supabase.
+          summary: '🔄 P0 - WebSocket Authentification personnalisé',
+          description: `**CRITIQUE** - WebSocket personnalisé pour écouter l'authentification en temps réel.
+
+## 🌐 WebSocket personnalisé (Server-Sent Events)
+
+\`\`\`javascript
+// Connexion au WebSocket personnalisé
+const connectToAuthWS = (email) => {
+  const eventSource = new EventSource(
+    \`https://dibs-poc0.vercel.app/api/auth/ws?email=\${encodeURIComponent(email)}\`
+  )
+  
+  eventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data)
+    console.log('WebSocket message:', data)
+    
+    switch (data.type) {
+      case 'connected':
+        console.log('✅ WebSocket connecté')
+        setStatus('En attente de l\'authentification...')
+        break
+        
+      case 'authenticated':
+        console.log('🎉 Utilisateur authentifié !', data.user)
+        setStatus('Connexion réussie !')
+        
+        // L'utilisateur est connecté !
+        Alert.alert('Connexion réussie !', 'Vous êtes maintenant connecté.')
+        navigation.navigate('Home')
+        
+        // Fermer la connexion
+        eventSource.close()
+        break
+        
+      case 'ping':
+        console.log('⏳ En attente...', data.message)
+        break
+        
+      case 'timeout':
+        console.log('⏰ Timeout WebSocket')
+        setStatus('Timeout - Veuillez réessayer')
+        eventSource.close()
+        break
+        
+      case 'error':
+        console.error('❌ Erreur WebSocket:', data.error)
+        setStatus('Erreur de connexion')
+        break
+    }
+  }
+  
+  eventSource.onerror = (error) => {
+    console.error('Erreur EventSource:', error)
+    setStatus('Erreur de connexion WebSocket')
+  }
+  
+  return eventSource
+}
+\`\`\`
+
+## 📱 Exemple complet avec WebSocket personnalisé
+
+\`\`\`javascript
+// LoginScreen avec WebSocket personnalisé
+import React, { useState, useRef } from 'react'
+import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native'
+
+const LoginScreen = ({ navigation }) => {
+  const [email, setEmail] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [status, setStatus] = useState('')
+  const eventSourceRef = useRef(null)
+  
+  const handleSendMagicLink = async () => {
+    if (!email) {
+      Alert.alert('Erreur', 'Veuillez saisir votre email')
+      return
+    }
+    
+    setIsLoading(true)
+    
+    try {
+      // 1. Envoyer le Magic Link
+      const response = await fetch('https://dibs-poc0.vercel.app/api/auth/magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        // 2. Connecter au WebSocket pour écouter l'authentification
+        const eventSource = new EventSource(
+          \`https://dibs-poc0.vercel.app/api/auth/ws?email=\${encodeURIComponent(email)}\`
+        )
+        
+        eventSourceRef.current = eventSource
+        
+        eventSource.onmessage = (event) => {
+          const data = JSON.parse(event.data)
+          
+          switch (data.type) {
+            case 'connected':
+              setStatus('WebSocket connecté - En attente...')
+              break
+              
+            case 'authenticated':
+              setStatus('Connexion réussie ! 🎉')
+              Alert.alert(
+                'Connexion réussie !', 
+                'Vous êtes maintenant connecté à DIBS.',
+                [{ text: 'Continuer', onPress: () => navigation.navigate('Home') }]
+              )
+              eventSource.close()
+              break
+              
+            case 'ping':
+              setStatus('En attente de l\'authentification...')
+              break
+              
+            case 'timeout':
+              setStatus('Timeout - Veuillez réessayer')
+              eventSource.close()
+              setIsLoading(false)
+              break
+              
+            case 'error':
+              setStatus('Erreur de connexion')
+              eventSource.close()
+              setIsLoading(false)
+              break
+          }
+        }
+        
+        Alert.alert(
+          'Email envoyé ! 📧', 
+          'Cliquez sur le lien dans votre email. La connexion se fera automatiquement via WebSocket.'
+        )
+        
+      } else {
+        Alert.alert('Erreur', result.error)
+        setIsLoading(false)
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible d\'envoyer l\'email')
+      setIsLoading(false)
+    }
+  }
+  
+  const handleCancel = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+    }
+    setIsLoading(false)
+    setStatus('')
+  }
+  
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Connexion DIBS</Text>
+      
+      {!isLoading ? (
+        <>
+          <TextInput
+            style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Votre email"
+            keyboardType="email-address"
+          />
+          
+          <TouchableOpacity style={styles.button} onPress={handleSendMagicLink}>
+            <Text style={styles.buttonText}>Connexion WebSocket</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View style={styles.waitingContainer}>
+          <Text style={styles.waitingTitle}>WebSocket actif</Text>
+          <Text style={styles.status}>{status}</Text>
+          <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+            <Text style={styles.cancelButtonText}>Annuler</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  )
+}
+\`\`\`
+
+## 🔄 Types de messages WebSocket
+
+- \`connected\` - WebSocket connecté
+- \`authenticated\` - Utilisateur authentifié (avec données user)
+- \`ping\` - Message de maintien de connexion
+- \`timeout\` - Timeout après 5 minutes
+- \`error\` - Erreur de connexion
+
+## ⚡ Avantages du WebSocket personnalisé
+
+- ✅ **Contrôle total** - Logique personnalisée
+- ✅ **Temps réel** - Détection instantanée
+- ✅ **Timeout automatique** - Fermeture après 5 minutes
+- ✅ **Messages détaillés** - Status et erreurs clairs
+- ✅ **Compatible mobile** - Fonctionne avec EventSource
+
+## 🚀 Utilisation avec Supabase (RECOMMANDÉ)
 
 ## 🚀 Utilisation avec Supabase (RECOMMANDÉ)
 
@@ -673,9 +878,57 @@ const LoginScreen = ({ navigation }) => {
 - \`TOKEN_REFRESHED\` - Token rafraîchi
 - \`USER_UPDATED\` - Profil utilisateur mis à jour`,
           'x-priority': 'P0',
+          parameters: [
+            {
+              name: 'email',
+              in: 'query',
+              required: true,
+              description: 'Email de l\'utilisateur à surveiller',
+              schema: { type: 'string', format: 'email', example: 'user@example.com' }
+            }
+          ],
           responses: {
+            200: {
+              description: 'Server-Sent Events stream pour l\'authentification',
+              content: {
+                'text/event-stream': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      type: { 
+                        type: 'string', 
+                        enum: ['connected', 'authenticated', 'ping', 'timeout', 'error'],
+                        example: 'authenticated' 
+                      },
+                      message: { type: 'string', example: 'Utilisateur authentifié avec succès !' },
+                      user: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string', format: 'uuid' },
+                          email: { type: 'string', format: 'email' },
+                          display_name: { type: 'string', nullable: true },
+                          last_sign_in_at: { type: 'string', format: 'date-time' }
+                        }
+                      },
+                      timestamp: { type: 'string', format: 'date-time' }
+                    }
+                  },
+                  example: {
+                    type: 'authenticated',
+                    message: 'Utilisateur authentifié avec succès !',
+                    user: {
+                      id: '550e8400-e29b-41d4-a716-446655440000',
+                      email: 'user@example.com',
+                      display_name: 'John Doe',
+                      last_sign_in_at: '2025-11-26T16:30:00Z'
+                    },
+                    timestamp: '2025-11-26T16:30:00Z'
+                  }
+                }
+              }
+            },
             101: {
-              description: 'WebSocket connection établie via Supabase Auth',
+              description: 'WebSocket connection établie via Supabase Auth (alternative)',
               content: {
                 'application/json': {
                   schema: {

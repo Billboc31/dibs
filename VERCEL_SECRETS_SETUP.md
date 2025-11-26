@@ -107,3 +107,4 @@ Si tu préfères ne pas utiliser la CLI, tu peux aussi :
 
 Les deux méthodes fonctionnent ! La CLI est juste plus pratique pour partager la config.
 
+

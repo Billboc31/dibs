@@ -316,3 +316,4 @@ export async function logout() {
 Voir la documentation interactive : **https://dibs-poc0.vercel.app/api-docs-mobile**
 
 Section **Auth** → **✨ P0 - Authentification Magic Link**
+

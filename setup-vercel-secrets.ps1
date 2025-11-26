@@ -47,3 +47,4 @@ Write-Host "4. Redeploy sur Vercel"
 Write-Host "5. Configure Spotify Developer avec la meme URL de callback"
 Write-Host ""
 
+

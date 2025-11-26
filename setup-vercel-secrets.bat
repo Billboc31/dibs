@@ -48,3 +48,4 @@ echo 5. Configure Spotify Developer avec la meme URL de callback
 echo.
 pause
 
+
