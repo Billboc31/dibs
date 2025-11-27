@@ -1724,6 +1724,94 @@ curl -X GET "https://dibs-poc0.vercel.app/api/user/artists?page=1&limit=10" \\
           }
         }
       },
+      '/api/user/artists/sync': {
+        post: {
+          tags: ['Artists'],
+          summary: '🔄 P1 - Synchroniser les artistes Spotify',
+          description: `Synchronise les artistes Spotify vers la liste personnelle de l'utilisateur.
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec Bearer token :
+\`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+
+const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists/sync', {
+  method: 'POST',
+  headers: {
+    'Authorization': \`Bearer \${authToken}\`,
+    'Content-Type': 'application/json'
+  }
+})
+
+const result = await response.json()
+
+if (response.ok) {
+  console.log(\`\${result.data.new_artists} nouveaux artistes synchronisés\`)
+  Alert.alert('Synchronisation réussie !', result.data.message)
+  // Recharger la liste des artistes
+  loadUserArtists()
+} else {
+  console.error('Erreur sync:', result.error)
+  Alert.alert('Erreur', result.error)
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X POST https://dibs-poc0.vercel.app/api/user/artists/sync \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json"
+\`\`\``,
+          'x-priority': 'P1',
+          responses: {
+            200: {
+              description: 'Artistes synchronisés',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          message: { type: 'string', example: '15 artistes synchronisés avec succès' },
+                          total_artists: { type: 'integer', example: 25 },
+                          new_artists: { type: 'integer', example: 15 },
+                          synced_artists: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                name: { type: 'string', example: 'Lady Gaga' },
+                                spotify_id: { type: 'string', example: '1HY2Jd0NmPuamShAr6KMms' }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      message: '15 artistes synchronisés avec succès',
+                      total_artists: 25,
+                      new_artists: 15,
+                      synced_artists: [
+                        { name: 'Lady Gaga', spotify_id: '1HY2Jd0NmPuamShAr6KMms' },
+                        { name: 'The Weeknd', spotify_id: '1Xyo4u8uXC1ZmMpatF05PJ' }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       '/api/user/artists/save': {
         post: {
           tags: ['Artists'],

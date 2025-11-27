@@ -28,11 +28,39 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10')
     const offset = page * limit
 
-    // Récupérer le nombre total d'artistes
+    console.log(`🔍 Recherche artistes pour user: ${user.id}`)
+
+    // Vérifier d'abord s'il y a des artistes dans la table artists
+    const { count: totalArtistsCount } = await supabaseAdmin
+      .from('artists')
+      .select('*', { count: 'exact', head: true })
+    
+    console.log(`📊 Total artistes dans la DB: ${totalArtistsCount}`)
+
+    // Récupérer le nombre total d'artistes de l'utilisateur
     const { count } = await supabaseAdmin
       .from('user_artists')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
+
+    console.log(`👤 Artistes de l'utilisateur: ${count}`)
+
+    // Si aucun artiste utilisateur, vérifier s'il y a des artistes Spotify à synchroniser
+    if (count === 0) {
+      console.log('⚠️ Aucun artiste utilisateur trouvé, vérification des artistes Spotify disponibles...')
+      
+      // Récupérer quelques artistes Spotify pour voir s'ils existent
+      const { data: spotifyArtists, error: spotifyError } = await supabaseAdmin
+        .from('artists')
+        .select('id, name, spotify_id')
+        .not('spotify_id', 'is', null)
+        .limit(5)
+      
+      console.log('🎵 Artistes Spotify disponibles:', spotifyArtists?.length || 0)
+      if (spotifyArtists && spotifyArtists.length > 0) {
+        console.log('📋 Exemples d\'artistes Spotify:', spotifyArtists.map(a => ({ name: a.name, spotify_id: a.spotify_id })))
+      }
+    }
 
     // Récupérer les artistes avec pagination
     const { data: artists, error: artistsError } = await supabaseAdmin
