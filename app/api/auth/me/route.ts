@@ -38,10 +38,17 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(`✅ Authenticated user: ${user.id}`)
+    console.log(`📋 User profile:`, {
+      id: profile?.id,
+      email: profile?.email,
+      display_name: profile?.display_name
+    })
     
     return NextResponse.json({
       success: true,
-      data: profile
+      data: {
+        user: profile
+      }
     })
   } catch (error: any) {
     console.error('❌ Error in GET /api/auth/me:', error)

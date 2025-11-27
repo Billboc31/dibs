@@ -398,7 +398,10 @@ export default function ApiDocsMobilePage() {
                       })
                       const result = await response.json()
                       if (response.ok) {
-                        alert(`✅ Token valide ! Utilisateur: ${result.data?.user?.email || 'N/A'}`)
+                        // Gérer les deux formats de réponse possibles
+                        const userEmail = result.data?.user?.email || result.data?.email || 'N/A'
+                        const userName = result.data?.user?.display_name || result.data?.display_name || 'N/A'
+                        alert(`✅ Token valide !\nUtilisateur: ${userEmail}\nNom: ${userName}`)
                       } else {
                         alert(`❌ Token invalide: ${result.error || 'Erreur inconnue'}`)
                       }
