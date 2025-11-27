@@ -30,6 +30,33 @@ export async function GET(request: NextRequest) {
 
     console.log(`🔍 Recherche artistes pour user: ${user.id}`)
 
+    // Vérifier si l'utilisateur a une connexion Spotify
+    const { data: spotifyConnection } = await supabaseAdmin
+      .from('user_streaming_platforms')
+      .select('access_token, refresh_token')
+      .eq('user_id', user.id)
+      .eq('platform_name', 'Spotify')
+      .single()
+
+    if (!spotifyConnection) {
+      return NextResponse.json({
+        success: false,
+        error: 'Aucune connexion Spotify trouvée. Connectez-vous d\'abord à Spotify via /connect-platform'
+      }, { status: 400 })
+    }
+
+    // Synchroniser les artistes Spotify du user (appel API + upsert dans table globale)
+    console.log('🎵 Synchronisation des artistes Spotify du user...')
+    const { syncSpotifyData } = await import('@/lib/spotify-api')
+    
+    try {
+      const syncedCount = await syncSpotifyData(user.id)
+      console.log(`🔄 ${syncedCount} artistes synchronisés depuis Spotify`)
+    } catch (error) {
+      console.error('❌ Erreur sync Spotify:', error)
+      // Continue même en cas d'erreur de sync
+    }
+
     // Vérifier d'abord s'il y a des artistes dans la table artists
     const { count: totalArtistsCount } = await supabaseAdmin
       .from('artists')
