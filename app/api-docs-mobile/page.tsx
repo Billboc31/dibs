@@ -160,35 +160,46 @@ export default function ApiDocsMobilePage() {
         'Content-Type': 'application/json'
       }
 
-      // Vérifier si l'endpoint nécessite une authentification
-      if (endpoint.auth) {
-        const currentToken = testToken.trim()
-        if (!currentToken) {
-          console.error('❌ Token manquant pour endpoint authentifié')
-          setTestResult({
-            status: 400,
-            statusText: 'Client Error',
-            data: { 
-              error: 'Token Bearer requis pour cet endpoint. Configurez-le dans la section "Token Bearer Global" en haut de la page.',
-              debug: {
-                endpoint: endpoint.path,
-                method: endpoint.method,
-                auth_required: endpoint.auth,
-                token_provided: false,
-                token_length: testToken.length
-              }
-            }
-          })
-          setTestLoading(false)
-          return
-        }
-        
+      console.log('🔍 Debug endpoint:', {
+        path: endpoint.path,
+        method: endpoint.method,
+        auth_required: endpoint.auth,
+        token_available: !!testToken,
+        token_length: testToken?.length || 0
+      })
+
+      // Vérifier si on force l'ajout du token
+      const forceToken = localStorage.getItem('dibs_force_token') !== 'false'
+      
+      // Ajouter le token si disponible
+      const currentToken = testToken?.trim()
+      if (currentToken && (endpoint.auth || forceToken)) {
         headers['Authorization'] = `Bearer ${currentToken}`
         console.log('🔑 Token ajouté aux headers:', {
           endpoint: endpoint.path,
           token_preview: currentToken.substring(0, 30) + '...',
-          header_set: true
+          header_set: true,
+          auth_detected: endpoint.auth,
+          force_token: forceToken
         })
+      } else if (endpoint.auth) {
+        console.error('❌ Token manquant pour endpoint authentifié')
+        setTestResult({
+          status: 400,
+          statusText: 'Client Error',
+          data: { 
+            error: 'Token Bearer requis pour cet endpoint. Configurez-le dans la section "Token Bearer Global" en haut de la page.',
+            debug: {
+              endpoint: endpoint.path,
+              method: endpoint.method,
+              auth_required: endpoint.auth,
+              token_provided: false,
+              token_length: testToken?.length || 0
+            }
+          }
+        })
+        setTestLoading(false)
+        return
       }
 
       const options: RequestInit = {
@@ -380,6 +391,19 @@ export default function ApiDocsMobilePage() {
             >
               🗑️ Effacer
             </button>
+          </div>
+          <div className="mt-2">
+            <label className="flex items-center gap-2 text-xs text-blue-700">
+              <input 
+                type="checkbox" 
+                defaultChecked={true}
+                onChange={(e) => {
+                  // Stocker la préférence
+                  localStorage.setItem('dibs_force_token', e.target.checked.toString())
+                }}
+              />
+              🔧 Forcer l'ajout du token à TOUS les endpoints (même non-authentifiés)
+            </label>
           </div>
           {testToken && (
             <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
