@@ -1603,8 +1603,8 @@ curl -X GET https://dibs-poc0.vercel.app/api/user/stats \\
       '/api/user/artists': {
         get: {
           tags: ['Artists'],
-          summary: '🎵 P0 - Artistes de l\'utilisateur',
-          description: `**CRITIQUE** - Récupère la liste des artistes suivis par l'utilisateur avec pagination.
+          summary: '🎵 P0 - Tous les artistes Spotify avec statut de sélection',
+          description: `**CRITIQUE** - Récupère TOUS les artistes Spotify avec un flag indiquant s'ils sont sélectionnés par l'utilisateur.
 
 ## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
 ✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
@@ -1613,7 +1613,7 @@ curl -X GET https://dibs-poc0.vercel.app/api/user/stats \\
 \`\`\`javascript
 const authToken = await AsyncStorage.getItem('auth_token')
 
-const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists?page=1&limit=10', {
+const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists?page=0&limit=20', {
   method: 'GET',
   headers: {
     'Authorization': \`Bearer \${authToken}\`,
@@ -1624,11 +1624,16 @@ const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists?page
 const result = await response.json()
 
 if (response.ok) {
-  const { artists, pagination } = result.data
-  console.log(\`\${artists.length} artistes récupérés\`)
-  console.log(\`Page \${pagination.page}/\${Math.ceil(pagination.total / pagination.limit)}\`)
+  const { artists, pagination, stats } = result.data
   
-  // Ajouter à la liste existante (scroll infini)
+  console.log(\`\${artists.length} artistes affichés\`)
+  console.log(\`\${stats.selected_artists} artistes sélectionnés sur \${stats.total_spotify_artists} total\`)
+  
+  // Séparer les artistes sélectionnés et non-sélectionnés
+  const selectedArtists = artists.filter(artist => artist.selected)
+  const unselectedArtists = artists.filter(artist => !artist.selected)
+  
+  // Ajouter à la liste (scroll infini)
   setArtists(prev => [...prev, ...artists])
   setHasMore(pagination.hasMore)
 } else {
@@ -1638,7 +1643,7 @@ if (response.ok) {
 
 ### 🔧 cURL avec Bearer token :
 \`\`\`bash
-curl -X GET "https://dibs-poc0.vercel.app/api/user/artists?page=1&limit=10" \\
+curl -X GET "https://dibs-poc0.vercel.app/api/user/artists?page=0&limit=20" \\
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
   -H "Content-Type: application/json"
 \`\`\``,
@@ -1804,6 +1809,123 @@ curl -X POST https://dibs-poc0.vercel.app/api/user/artists/sync \\
                         { name: 'Lady Gaga', spotify_id: '1HY2Jd0NmPuamShAr6KMms' },
                         { name: 'The Weeknd', spotify_id: '1Xyo4u8uXC1ZmMpatF05PJ' }
                       ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/user/artists/toggle': {
+        post: {
+          tags: ['Artists'],
+          summary: '🔄 P0 - Sélectionner/désélectionner un artiste',
+          description: `**CRITIQUE** - Sélectionne ou désélectionne un artiste spécifique sans affecter les autres.
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec Bearer token :
+\`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+
+// Sélectionner un artiste
+const response = await fetch('https://dibs-poc0.vercel.app/api/user/artists/toggle', {
+  method: 'POST',
+  headers: {
+    'Authorization': \`Bearer \${authToken}\`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    artistId: '550e8400-e29b-41d4-a716-446655440001',
+    selected: true  // true = sélectionner, false = désélectionner
+  })
+})
+
+const result = await response.json()
+
+if (response.ok) {
+  console.log(\`Artiste \${result.data.artist.name} \${result.data.artist.selected ? 'sélectionné' : 'désélectionné'}\`)
+  console.log(\`Total sélectionnés: \${result.data.total_selected}\`)
+  
+  // Mettre à jour l'interface
+  updateArtistSelection(result.data.artist.id, result.data.artist.selected)
+} else {
+  console.error('Erreur toggle:', result.error)
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X POST https://dibs-poc0.vercel.app/api/user/artists/toggle \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"artistId":"550e8400-e29b-41d4-a716-446655440001","selected":true}'
+\`\`\``,
+          'x-priority': 'P0',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['artistId', 'selected'],
+                  properties: {
+                    artistId: { 
+                      type: 'string', 
+                      format: 'uuid',
+                      example: '550e8400-e29b-41d4-a716-446655440001',
+                      description: 'ID de l\'artiste à sélectionner/désélectionner'
+                    },
+                    selected: { 
+                      type: 'boolean', 
+                      example: true,
+                      description: 'true pour sélectionner, false pour désélectionner'
+                    }
+                  }
+                },
+                example: {
+                  artistId: '550e8400-e29b-41d4-a716-446655440001',
+                  selected: true
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Artiste sélectionné/désélectionné',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          artist: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string', format: 'uuid' },
+                              name: { type: 'string', example: 'Lady Gaga' },
+                              selected: { type: 'boolean', example: true }
+                            }
+                          },
+                          total_selected: { type: 'integer', example: 5 }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      artist: {
+                        id: '550e8400-e29b-41d4-a716-446655440001',
+                        name: 'Lady Gaga',
+                        selected: true
+                      },
+                      total_selected: 5
                     }
                   }
                 }

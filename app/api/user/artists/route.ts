@@ -62,25 +62,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Récupérer les artistes avec pagination
-    const { data: artists, error: artistsError } = await supabaseAdmin
-      .from('user_artists')
+    // Récupérer TOUS les artistes Spotify avec le statut de sélection
+    const { data: allArtists, error: artistsError } = await supabaseAdmin
+      .from('artists')
       .select(`
-        artist_id,
-        fanitude_points,
-        last_listening_minutes,
-        artists (
-          id,
-          name,
-          spotify_id,
-          apple_music_id,
-          deezer_id,
-          image_url,
-          created_at
-        )
+        id,
+        name,
+        spotify_id,
+        apple_music_id,
+        deezer_id,
+        image_url,
+        created_at
       `)
-      .eq('user_id', user.id)
-      .order('last_listening_minutes', { ascending: false })
+      .not('spotify_id', 'is', null)
+      .order('name')
       .range(offset, offset + limit - 1)
 
     if (artistsError) {
@@ -91,17 +86,63 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const hasMore = (count || 0) > offset + limit
+    // Récupérer les artistes sélectionnés par l'utilisateur
+    const { data: selectedArtists } = await supabaseAdmin
+      .from('user_artists')
+      .select('artist_id, fanitude_points, last_listening_minutes')
+      .eq('user_id', user.id)
+
+    // Créer un Map des artistes sélectionnés pour un accès rapide
+    const selectedArtistsMap = new Map(
+      selectedArtists?.map(ua => [ua.artist_id, ua]) || []
+    )
+
+    // Combiner les données : tous les artistes + flag de sélection
+    const artists = allArtists?.map(artist => {
+      const userArtist = selectedArtistsMap.get(artist.id)
+      return {
+        ...artist,
+        selected: !!userArtist,
+        fanitude_points: userArtist?.fanitude_points || 0,
+        last_listening_minutes: userArtist?.last_listening_minutes || 0
+      }
+    }) || []
+
+    // Recalculer le total avec tous les artistes Spotify
+    const { count: totalSpotifyCount } = await supabaseAdmin
+      .from('artists')
+      .select('*', { count: 'exact', head: true })
+      .not('spotify_id', 'is', null)
+
+    if (artistsError) {
+      console.error('❌ Error fetching artists:', artistsError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch artists' },
+        { status: 500 }
+      )
+    }
+
+    const hasMore = (totalSpotifyCount || 0) > offset + limit
+    const selectedCount = artists.filter(a => a.selected).length
 
     console.log(`✅ Fetched ${artists?.length || 0} artists for user ${user.id} (page ${page})`)
+    console.log(`📊 Total Spotify: ${totalSpotifyCount}, Sélectionnés: ${selectedCount}`)
     
     return NextResponse.json({
       success: true,
       data: {
         artists: artists || [],
-        total: count || 0,
-        page,
-        hasMore
+        pagination: {
+          page,
+          limit,
+          total: totalSpotifyCount || 0,
+          hasMore
+        },
+        stats: {
+          total_spotify_artists: totalSpotifyCount || 0,
+          selected_artists: selectedCount,
+          displayed_artists: artists?.length || 0
+        }
       }
     })
   } catch (error: any) {
