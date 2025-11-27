@@ -32,6 +32,12 @@ export default function ApiDocsMobilePage() {
       .then(res => res.json())
       .then(data => setSpec(data))
 
+    // Charger le token depuis localStorage
+    const savedToken = localStorage.getItem('dibs_test_token')
+    if (savedToken) {
+      setTestToken(savedToken)
+    }
+
     // Override mobile-container styles for full-width
     const mobileContainer = document.querySelector('.mobile-container') as HTMLElement
     if (mobileContainer) {
@@ -156,17 +162,33 @@ export default function ApiDocsMobilePage() {
 
       // Vérifier si l'endpoint nécessite une authentification
       if (endpoint.auth) {
-        if (!testToken) {
+        const currentToken = testToken.trim()
+        if (!currentToken) {
+          console.error('❌ Token manquant pour endpoint authentifié')
           setTestResult({
             status: 400,
-            statusText: 'Error',
-            data: { error: 'Token Bearer requis pour cet endpoint. Configurez-le dans la section "Token Bearer Global" en haut de la page.' }
+            statusText: 'Client Error',
+            data: { 
+              error: 'Token Bearer requis pour cet endpoint. Configurez-le dans la section "Token Bearer Global" en haut de la page.',
+              debug: {
+                endpoint: endpoint.path,
+                method: endpoint.method,
+                auth_required: endpoint.auth,
+                token_provided: false,
+                token_length: testToken.length
+              }
+            }
           })
           setTestLoading(false)
           return
         }
-        headers['Authorization'] = `Bearer ${testToken}`
-        console.log('🔑 Token ajouté aux headers:', testToken.substring(0, 20) + '...')
+        
+        headers['Authorization'] = `Bearer ${currentToken}`
+        console.log('🔑 Token ajouté aux headers:', {
+          endpoint: endpoint.path,
+          token_preview: currentToken.substring(0, 30) + '...',
+          header_set: true
+        })
       }
 
       const options: RequestInit = {
@@ -326,7 +348,16 @@ export default function ApiDocsMobilePage() {
             <input
               type="text"
               value={testToken}
-              onChange={(e) => setTestToken(e.target.value)}
+              onChange={(e) => {
+                const newToken = e.target.value
+                setTestToken(newToken)
+                // Sauvegarder dans localStorage
+                if (newToken) {
+                  localStorage.setItem('dibs_test_token', newToken)
+                } else {
+                  localStorage.removeItem('dibs_test_token')
+                }
+              }}
               placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
               className="flex-1 px-3 py-2 border border-blue-300 rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -334,13 +365,17 @@ export default function ApiDocsMobilePage() {
               onClick={() => {
                 const exampleToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3Vpa3NiaGdvamd2eXRhcGVsYnVxLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIwYjNlNWZkMS0zYWIzLTQxY2QtYWIzOS04NmIxMzc2ZWNhYWYiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY0MjA0MDQ2LCJpYXQiOjE3NjQyMDA0NDYsImVtYWlsIjoiYm9jcXVldC5waWVycmVAZ21haWwuY29tIn0.EXAMPLE_TOKEN_FOR_TESTING'
                 setTestToken(exampleToken)
+                localStorage.setItem('dibs_test_token', exampleToken)
               }}
               className="px-3 py-2 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
             >
               📋 Exemple
             </button>
             <button
-              onClick={() => setTestToken('')}
+              onClick={() => {
+                setTestToken('')
+                localStorage.removeItem('dibs_test_token')
+              }}
               className="px-3 py-2 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
             >
               🗑️ Effacer
@@ -348,10 +383,35 @@ export default function ApiDocsMobilePage() {
           </div>
           {testToken && (
             <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
-              <p className="text-xs text-green-700">
-                ✅ Token configuré: {testToken.substring(0, 40)}...
-              </p>
-              <p className="text-xs text-green-600 mt-1">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-green-700">
+                  ✅ Token configuré: {testToken.substring(0, 40)}...
+                </p>
+                <button
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(`${spec?.servers?.[0]?.url || 'https://dibs-poc0.vercel.app'}/api/auth/me`, {
+                        headers: {
+                          'Authorization': `Bearer ${testToken}`,
+                          'Content-Type': 'application/json'
+                        }
+                      })
+                      const result = await response.json()
+                      if (response.ok) {
+                        alert(`✅ Token valide ! Utilisateur: ${result.data?.user?.email || 'N/A'}`)
+                      } else {
+                        alert(`❌ Token invalide: ${result.error || 'Erreur inconnue'}`)
+                      }
+                    } catch (error) {
+                      alert(`❌ Erreur test token: ${error}`)
+                    }
+                  }}
+                  className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+                >
+                  🧪 Tester
+                </button>
+              </div>
+              <p className="text-xs text-green-600">
                 Ce token sera automatiquement utilisé pour tous les webservices authentifiés.
               </p>
             </div>
