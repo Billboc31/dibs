@@ -62,31 +62,65 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Récupérer TOUS les artistes Spotify avec le statut de sélection
-    const { data: allArtists, error: artistsError } = await supabaseAdmin
-      .from('artists')
+    // Récupérer les artistes Spotify du user depuis Spotify API
+    console.log('🎵 Récupération des artistes Spotify du user...')
+    
+    // Vérifier si l'utilisateur a une connexion Spotify
+    const { data: spotifyConnection } = await supabaseAdmin
+      .from('user_streaming_platforms')
+      .select('access_token, refresh_token')
+      .eq('user_id', user.id)
+      .eq('platform_name', 'Spotify')
+      .single()
+
+    if (!spotifyConnection) {
+      return NextResponse.json({
+        success: false,
+        error: 'Aucune connexion Spotify trouvée. Connectez-vous d\'abord à Spotify via /connect-platform'
+      }, { status: 400 })
+    }
+
+    // Importer la fonction de sync Spotify
+    const { syncSpotifyData } = await import('@/lib/spotify-api')
+    
+    try {
+      // Synchroniser les artistes Spotify du user (récupère ses artistes depuis Spotify)
+      const syncedCount = await syncSpotifyData(user.id)
+      console.log(`🔄 ${syncedCount} artistes synchronisés depuis Spotify`)
+    } catch (error) {
+      console.error('❌ Erreur sync Spotify:', error)
+      return NextResponse.json({
+        success: false,
+        error: 'Erreur lors de la synchronisation Spotify'
+      }, { status: 500 })
+    }
+
+    // Récupérer les artistes Spotify de CE user uniquement
+    const { data: userSpotifyArtists, error: artistsError } = await supabaseAdmin
+      .from('user_spotify_artists')
       .select(`
         id,
         name,
         spotify_id,
-        apple_music_id,
-        deezer_id,
         image_url,
+        popularity,
+        followers_count,
+        genres,
         created_at
       `)
-      .not('spotify_id', 'is', null)
+      .eq('user_id', user.id)
       .order('name')
       .range(offset, offset + limit - 1)
 
     if (artistsError) {
-      console.error('❌ Error fetching artists:', artistsError)
+      console.error('❌ Error fetching user Spotify artists:', artistsError)
       return NextResponse.json(
-        { success: false, error: 'Failed to fetch artists' },
+        { success: false, error: 'Failed to fetch user Spotify artists' },
         { status: 500 }
       )
     }
 
-    // Récupérer les artistes sélectionnés par l'utilisateur
+    // Récupérer les artistes sélectionnés par l'utilisateur (référence vers user_spotify_artists)
     const { data: selectedArtists } = await supabaseAdmin
       .from('user_artists')
       .select('artist_id, fanitude_points, last_listening_minutes')
@@ -97,8 +131,8 @@ export async function GET(request: NextRequest) {
       selectedArtists?.map(ua => [ua.artist_id, ua]) || []
     )
 
-    // Combiner les données : tous les artistes + flag de sélection
-    const artists = allArtists?.map(artist => {
+    // Combiner les données : artistes Spotify du user + flag de sélection
+    const artists = userSpotifyArtists?.map(artist => {
       const userArtist = selectedArtistsMap.get(artist.id)
       return {
         ...artist,
@@ -108,11 +142,11 @@ export async function GET(request: NextRequest) {
       }
     }) || []
 
-    // Recalculer le total avec tous les artistes Spotify
+    // Compter le total des artistes Spotify de ce user
     const { count: totalSpotifyCount } = await supabaseAdmin
-      .from('artists')
+      .from('user_spotify_artists')
       .select('*', { count: 'exact', head: true })
-      .not('spotify_id', 'is', null)
+      .eq('user_id', user.id)
 
     if (artistsError) {
       console.error('❌ Error fetching artists:', artistsError)

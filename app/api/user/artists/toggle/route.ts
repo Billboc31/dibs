@@ -35,16 +35,17 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔄 Toggle artist ${artistId} to ${selected ? 'selected' : 'unselected'} for user ${user.id}`)
 
-    // Vérifier si l'artiste existe
+    // Vérifier si l'artiste existe dans les artistes Spotify de ce user
     const { data: artist, error: artistError } = await supabaseAdmin
-      .from('artists')
+      .from('user_spotify_artists')
       .select('id, name')
       .eq('id', artistId)
+      .eq('user_id', user.id)
       .single()
 
     if (artistError || !artist) {
       return NextResponse.json(
-        { success: false, error: 'Artist not found' },
+        { success: false, error: 'Artist not found in your Spotify artists' },
         { status: 404 }
       )
     }
