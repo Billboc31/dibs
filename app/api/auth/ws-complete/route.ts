@@ -10,6 +10,12 @@ export async function GET(request: NextRequest) {
     return new Response('Email parameter required', { status: 400 })
   }
 
+  // Validation basique de l'email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email)) {
+    return new Response('Invalid email format', { status: 400 })
+  }
+
   console.log('🚀 WebSocket complet démarré pour:', email)
 
   const encoder = new TextEncoder()
@@ -19,6 +25,10 @@ export async function GET(request: NextRequest) {
       // Stocker cette connexion pour pouvoir l'utiliser depuis le callback
       registerWebSocketConnection(email, controller)
 
+      // Variables pour les timers (définis tôt pour pouvoir les utiliser dans les erreurs)
+      let pingInterval: NodeJS.Timeout | null = null
+      let timeout: NodeJS.Timeout | null = null
+
       // Fonction pour envoyer des messages
       const send = (data: any) => {
         try {
@@ -27,6 +37,15 @@ export async function GET(request: NextRequest) {
         } catch (error) {
           console.error('Erreur envoi message WebSocket:', error)
         }
+      }
+
+      // Fonction pour fermer proprement le WebSocket
+      const closeWebSocket = (reason: string) => {
+        console.log(`🔴 Fermeture du WebSocket: ${reason}`)
+        if (pingInterval) clearInterval(pingInterval)
+        if (timeout) clearTimeout(timeout)
+        unregisterWebSocketConnection(email)
+        controller.close()
       }
 
       // 1. Message de connexion
@@ -71,6 +90,11 @@ export async function GET(request: NextRequest) {
               error: error.message,
               timestamp: new Date().toISOString()
             })
+            
+            // Fermer le stream immédiatement pour que l'app mobile reçoive l'erreur
+            setTimeout(() => {
+              closeWebSocket('Erreur Magic Link')
+            }, 100) // Petit délai pour s'assurer que le message est envoyé
             return
           }
 
@@ -101,6 +125,11 @@ export async function GET(request: NextRequest) {
             error: error instanceof Error ? error.message : 'Unknown error',
             timestamp: new Date().toISOString()
           })
+          
+          // Fermer le stream immédiatement pour que l'app mobile reçoive l'erreur
+          setTimeout(() => {
+            closeWebSocket('Erreur interne Magic Link')
+          }, 100) // Petit délai pour s'assurer que le message est envoyé
         }
       }
 
@@ -108,7 +137,7 @@ export async function GET(request: NextRequest) {
       sendMagicLink()
 
       // Ping périodique pour maintenir la connexion
-      const pingInterval = setInterval(() => {
+      pingInterval = setInterval(() => {
         send({
           status: 'ping',
           message: 'Connexion active, en attente du Magic Link...',
@@ -118,21 +147,21 @@ export async function GET(request: NextRequest) {
       }, 10000) // Toutes les 10 secondes
 
       // Timeout après 5 minutes
-      const timeout = setTimeout(() => {
-        clearInterval(pingInterval)
-        unregisterWebSocketConnection(email)
+      timeout = setTimeout(() => {
         send({
           status: 'timeout',
           message: 'Timeout - Connexion fermée après 5 minutes',
           timestamp: new Date().toISOString()
         })
-        controller.close()
+        setTimeout(() => {
+          closeWebSocket('Timeout 5 minutes')
+        }, 100)
       }, 5 * 60 * 1000)
 
       // Nettoyer quand la connexion se ferme
       return () => {
-        clearInterval(pingInterval)
-        clearTimeout(timeout)
+        if (pingInterval) clearInterval(pingInterval)
+        if (timeout) clearTimeout(timeout)
         unregisterWebSocketConnection(email)
       }
     }

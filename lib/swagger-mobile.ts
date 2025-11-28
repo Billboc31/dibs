@@ -1328,9 +1328,54 @@ eventSource.onmessage = (event) => {
     case 'error':
       console.error('❌ Erreur:', data.error)
       Alert.alert('Erreur', data.message)
-      eventSource.close()
+      eventSource.close() // Le WebSocket se ferme automatiquement après l'erreur
+      break
+      
+    case 'timeout':
+      console.log('⏰ Timeout - Connexion fermée')
+      Alert.alert('Timeout', 'La connexion a expiré après 5 minutes.')
+      eventSource.close() // Le WebSocket se ferme automatiquement après le timeout
       break
   }
+}
+\`\`\`
+
+## 🔴 **GESTION DES ERREURS - FERMETURE AUTOMATIQUE**
+
+⚠️ **IMPORTANT** : Le WebSocket se ferme **automatiquement** en cas d'erreur ou de timeout !
+
+### 📱 **Pourquoi cette fermeture automatique ?**
+- **EventSource** ne transmet les données à l'app mobile qu'à la **fermeture du stream**
+- En cas d'erreur, le WebSocket **ferme immédiatement** pour que l'app reçoive l'erreur
+- **Timeout après 5 minutes** pour éviter les connexions infinies
+
+### 🔄 **Types d'erreurs gérées :**
+1. **\`error\`** - Erreur lors de l'envoi du Magic Link → **Fermeture immédiate**
+2. **\`timeout\`** - Connexion expirée (5 min) → **Fermeture automatique**
+3. **Email invalide** - Format d'email incorrect → **Erreur HTTP 400**
+
+### 📱 **Gestion dans l'app mobile :**
+\`\`\`javascript
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data)
+  
+  if (data.status === 'error' || data.status === 'timeout') {
+    // Le WebSocket va se fermer automatiquement
+    Alert.alert('Erreur', data.message)
+    setIsLoading(false)
+    // Pas besoin d'appeler eventSource.close() - c'est automatique
+  }
+}
+
+eventSource.onerror = (error) => {
+  console.error('Erreur WebSocket:', error)
+  Alert.alert('Erreur de connexion', 'Problème de réseau')
+  setIsLoading(false)
+}
+
+eventSource.onclose = () => {
+  console.log('WebSocket fermé')
+  setIsLoading(false)
 }
 \`\`\`
 

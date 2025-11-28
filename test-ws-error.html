@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test WebSocket Magic Link - Gestion d'erreurs</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #ffe6e6; border-left: 4px solid #ff0000; }
+        .success { background: #e6ffe6; border-left: 4px solid #00ff00; }
+        .info { background: #e6f3ff; border-left: 4px solid #0066cc; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test WebSocket Magic Link - Gestion d'erreurs</h1>
+    
+    <div>
+        <h3>Test 1: Email valide</h3>
+        <input type="email" id="validEmail" value="test.valid@gmail.com" placeholder="Email valide">
+        <button onclick="testValidEmail()">Tester email valide</button>
+    </div>
+    
+    <div>
+        <h3>Test 2: Email invalide (doit fermer immédiatement)</h3>
+        <input type="email" id="invalidEmail" value="email-invalide" placeholder="Email invalide">
+        <button onclick="testInvalidEmail()">Tester email invalide</button>
+    </div>
+    
+    <div>
+        <h3>Test 3: Email inexistant (doit fermer après erreur Supabase)</h3>
+        <input type="email" id="nonExistentEmail" value="test.inexistant.error@gmail.com" placeholder="Email inexistant">
+        <button onclick="testNonExistentEmail()">Tester email inexistant</button>
+    </div>
+    
+    <button onclick="clearLogs()">Effacer les logs</button>
+    
+    <div id="logs"></div>
+
+    <script>
+        const BASE_URL = 'http://127.0.0.1:3001'
+        let currentEventSource = null
+        
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs')
+            const div = document.createElement('div')
+            div.className = `log ${type}`
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`
+            logs.appendChild(div)
+            logs.scrollTop = logs.scrollHeight
+            console.log(message)
+        }
+        
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = ''
+        }
+        
+        function closeCurrentConnection() {
+            if (currentEventSource) {
+                currentEventSource.close()
+                currentEventSource = null
+                log('🔴 Connexion fermée manuellement', 'info')
+            }
+        }
+        
+        function testWebSocket(email, testName) {
+            closeCurrentConnection()
+            
+            log(`🚀 Démarrage du test: ${testName}`, 'info')
+            log(`📧 Email testé: ${email}`, 'info')
+            
+            const url = `${BASE_URL}/api/auth/ws-complete?email=${encodeURIComponent(email)}`
+            log(`🔗 URL: ${url}`, 'info')
+            
+            currentEventSource = new EventSource(url)
+            
+            currentEventSource.onopen = () => {
+                log('✅ WebSocket ouvert', 'success')
+            }
+            
+            currentEventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data)
+                log(`📨 Message reçu: ${JSON.stringify(data)}`, 'info')
+                
+                switch (data.status) {
+                    case 'connected':
+                        log('✅ WebSocket connecté', 'success')
+                        break
+                    case 'sending_magic_link':
+                        log('📧 Envoi du Magic Link...', 'info')
+                        break
+                    case 'magic_link_sent':
+                        log('✅ Magic Link envoyé !', 'success')
+                        break
+                    case 'waiting_for_click':
+                        log('⏳ En attente du clic...', 'info')
+                        break
+                    case 'error':
+                        log(`❌ ERREUR: ${data.message} (${data.error})`, 'error')
+                        log('🔴 Le WebSocket devrait se fermer automatiquement...', 'info')
+                        break
+                    case 'timeout':
+                        log('⏰ TIMEOUT: Connexion expirée', 'error')
+                        break
+                    case 'authenticated':
+                        log('🎉 AUTHENTIFIÉ ! Token reçu', 'success')
+                        break
+                }
+            }
+            
+            currentEventSource.onerror = (error) => {
+                log(`❌ Erreur WebSocket: ${error}`, 'error')
+            }
+            
+            currentEventSource.onclose = () => {
+                log('🔴 WebSocket FERMÉ (automatiquement ou manuellement)', 'info')
+                currentEventSource = null
+            }
+        }
+        
+        function testValidEmail() {
+            const email = document.getElementById('validEmail').value
+            testWebSocket(email, 'Email valide')
+        }
+        
+        function testInvalidEmail() {
+            const email = document.getElementById('invalidEmail').value
+            testWebSocket(email, 'Email invalide')
+        }
+        
+        function testNonExistentEmail() {
+            const email = document.getElementById('nonExistentEmail').value
+            testWebSocket(email, 'Email inexistant')
+        }
+    </script>
+</body>
+</html>
