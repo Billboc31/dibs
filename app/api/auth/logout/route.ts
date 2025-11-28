@@ -22,14 +22,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Invalider le token (côté client, le token sera supprimé)
-    // Note: Supabase Auth gère automatiquement l'invalidation des sessions
+    // Invalider le token côté Supabase
+    const { error: signOutError } = await supabaseAdmin.auth.admin.signOut(user.id)
     
-    console.log(`✅ User logged out: ${user.id}`)
+    if (signOutError) {
+      console.error('❌ Erreur invalidation token Supabase:', signOutError)
+      return NextResponse.json({
+        success: false,
+        error: 'Erreur lors de la déconnexion'
+      }, { status: 500 })
+    }
+    
+    console.log(`✅ User logged out and token invalidated: ${user.id}`)
     
     return NextResponse.json({
       success: true,
-      message: 'Logged out successfully'
+      message: 'Logged out successfully - Token invalidated'
     })
   } catch (error: any) {
     console.error('❌ Error in POST /api/auth/logout:', error)

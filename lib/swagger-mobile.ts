@@ -1721,7 +1721,7 @@ curl -X POST https://dibs-poc0.vercel.app/api/auth/logout \\
                       data: {
                         type: 'object',
                         properties: {
-                          message: { type: 'string', example: 'Logged out successfully' }
+                          message: { type: 'string', example: 'Logged out successfully - Token invalidated' }
                         }
                       }
                     }
