@@ -15,6 +15,8 @@ Cette API est spécifiquement conçue pour l'application mobile.
 ## 🔐 **AUTHENTIFICATION - Guide complet**
 
 ### 🚫 **Endpoints SANS authentification :**
+- \`POST /api/auth/login\` - Connexion email/mot de passe
+- \`POST /api/auth/register\` - Inscription email/mot de passe  
 - \`POST /api/auth/magic-link\` - Demander un Magic Link
 - \`GET /api/auth/ws-complete\` - WebSocket complet (Magic Link + Token)
 
@@ -29,30 +31,63 @@ headers: {
 \`\`\`
 
 ### 🎯 **Comment obtenir le token :**
-1. **Utiliser le WebSocket COMPLET** (recommandé) :
-   \`\`\`javascript
-   const eventSource = new EventSource(
-     \`https://dibs-poc0.vercel.app/api/auth/ws-complete?email=\${email}\`
-   )
-   // Le token arrive automatiquement dans data.session.access_token
-   \`\`\`
 
-2. **Ou utiliser Magic Link + Supabase WebSocket** :
-   \`\`\`javascript
-   // 1. Demander Magic Link
-   await fetch('/api/auth/magic-link', { 
-     method: 'POST', 
-     body: JSON.stringify({email}) 
-   })
-   
-   // 2. Écouter avec Supabase
-   supabase.auth.onAuthStateChange((event, session) => {
-     if (session) {
-       const token = session.access_token
-       // Utiliser ce token pour les autres appels
-     }
-   })
-   \`\`\`
+#### **1. 🔑 Authentification Email/Mot de passe (RECOMMANDÉ)** :
+\`\`\`javascript
+// Inscription
+const registerResponse = await fetch('/api/auth/register', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'user@example.com',
+    password: 'motdepasse123',
+    display_name: 'Mon Nom'
+  })
+})
+
+// Connexion
+const loginResponse = await fetch('/api/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'user@example.com',
+    password: 'motdepasse123'
+  })
+})
+
+const { data } = await loginResponse.json()
+const authToken = data.session.access_token
+const refreshToken = data.session.refresh_token
+
+// Sauvegarder les tokens
+await AsyncStorage.setItem('auth_token', authToken)
+await AsyncStorage.setItem('refresh_token', refreshToken)
+\`\`\`
+
+#### **2. 📧 WebSocket Magic Link (Alternative)** :
+\`\`\`javascript
+const eventSource = new EventSource(
+  \`https://dibs-poc0.vercel.app/api/auth/ws-complete?email=\${email}\`
+)
+// Le token arrive automatiquement dans data.session.access_token
+\`\`\`
+
+#### **3. 🔗 Magic Link + Supabase WebSocket** :
+\`\`\`javascript
+// 1. Demander Magic Link
+await fetch('/api/auth/magic-link', { 
+  method: 'POST', 
+  body: JSON.stringify({email}) 
+})
+
+// 2. Écouter avec Supabase
+supabase.auth.onAuthStateChange((event, session) => {
+  if (session) {
+    const token = session.access_token
+    // Utiliser ce token pour les autres appels
+  }
+})
+\`\`\`
 
 ### 🔄 **Gestion automatique du token (Axios) :**
 \`\`\`javascript
@@ -750,6 +785,377 @@ const checkAuthStatus = async () => {
     ],
     paths: {
       // === AUTHENTICATION ===
+      '/api/auth/login': {
+        post: {
+          tags: ['Auth'],
+          summary: '🔑 P0 - Connexion Email/Mot de passe',
+          description: `**CRITIQUE** - Authentification classique avec email et mot de passe. Retourne un token JWT pour les appels API suivants.
+
+## 🔐 **AUTHENTIFICATION REQUISE : NON** 
+❌ **Pas d'authentification nécessaire** - Cet endpoint sert justement à obtenir le token d'authentification !
+
+### 📱 **Exemple React Native :**
+\`\`\`javascript
+const login = async (email, password) => {
+  try {
+    const response = await fetch('https://dibs-poc0.vercel.app/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      // Sauvegarder les tokens
+      await AsyncStorage.setItem('auth_token', result.data.session.access_token)
+      await AsyncStorage.setItem('refresh_token', result.data.session.refresh_token)
+      
+      // Naviguer vers l'écran principal
+      navigation.navigate('Home')
+    } else {
+      Alert.alert('Erreur', result.error)
+    }
+  } catch (error) {
+    Alert.alert('Erreur', 'Problème de connexion')
+  }
+}
+\`\`\``,
+          'x-priority': 'P0',
+          security: [], // Pas d'auth requise pour se connecter
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['email', 'password'],
+                  properties: {
+                    email: { 
+                      type: 'string', 
+                      format: 'email', 
+                      example: 'user@example.com',
+                      description: 'Adresse email de l\'utilisateur'
+                    },
+                    password: { 
+                      type: 'string', 
+                      minLength: 6,
+                      example: 'motdepasse123',
+                      description: 'Mot de passe (minimum 6 caractères)'
+                    }
+                  }
+                },
+                example: {
+                  email: 'user@example.com',
+                  password: 'motdepasse123'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Connexion réussie',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          user: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string', format: 'uuid' },
+                              email: { type: 'string', format: 'email' },
+                              display_name: { type: 'string', nullable: true },
+                              avatar_url: { type: 'string', nullable: true },
+                              city: { type: 'string', nullable: true },
+                              country: { type: 'string', nullable: true },
+                              created_at: { type: 'string', format: 'date-time' }
+                            }
+                          },
+                          session: {
+                            type: 'object',
+                            properties: {
+                              access_token: { type: 'string', description: 'Token JWT pour les appels API' },
+                              refresh_token: { type: 'string', description: 'Token pour renouveler l\'access_token' },
+                              expires_at: { type: 'integer', description: 'Timestamp d\'expiration' },
+                              expires_in: { type: 'integer', description: 'Durée de validité en secondes' }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      user: {
+                        id: '550e8400-e29b-41d4-a716-446655440000',
+                        email: 'user@example.com',
+                        display_name: 'John Doe',
+                        avatar_url: null,
+                        city: 'Paris',
+                        country: 'France',
+                        created_at: '2025-01-15T10:30:00Z'
+                      },
+                      session: {
+                        access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                        refresh_token: 'v1.M2YwMDAwMDAwMDAwMDAwMA.refresh_token_here',
+                        expires_at: 1705312200,
+                        expires_in: 3600
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Données manquantes ou invalides',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Error' },
+                  example: {
+                    success: false,
+                    error: 'Email et mot de passe requis'
+                  }
+                }
+              }
+            },
+            401: {
+              description: 'Identifiants incorrects',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Error' },
+                  example: {
+                    success: false,
+                    error: 'Invalid login credentials'
+                  }
+                }
+              }
+            },
+            500: {
+              description: 'Erreur interne du serveur',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Error' },
+                  example: {
+                    success: false,
+                    error: 'Erreur interne du serveur'
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '/api/auth/register': {
+        post: {
+          tags: ['Auth'],
+          summary: '📝 P0 - Inscription Email/Mot de passe',
+          description: `**CRITIQUE** - Créer un nouveau compte utilisateur avec email et mot de passe. Retourne un token JWT si l'inscription est immédiate, ou demande une confirmation email.
+
+## 🔐 **AUTHENTIFICATION REQUISE : NON** 
+❌ **Pas d'authentification nécessaire** - Cet endpoint sert à créer un nouveau compte !
+
+### 📱 **Exemple React Native :**
+\`\`\`javascript
+const register = async (email, password, displayName) => {
+  try {
+    const response = await fetch('https://dibs-poc0.vercel.app/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        email, 
+        password, 
+        display_name: displayName 
+      })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      if (result.data.session) {
+        // Inscription immédiate - sauvegarder les tokens
+        await AsyncStorage.setItem('auth_token', result.data.session.access_token)
+        await AsyncStorage.setItem('refresh_token', result.data.session.refresh_token)
+        navigation.navigate('Home')
+      } else {
+        // Confirmation email requise
+        Alert.alert('Succès', result.data.message)
+        navigation.navigate('Login')
+      }
+    } else {
+      Alert.alert('Erreur', result.error)
+    }
+  } catch (error) {
+    Alert.alert('Erreur', 'Problème de connexion')
+  }
+}
+\`\`\``,
+          'x-priority': 'P0',
+          security: [], // Pas d'auth requise pour s'inscrire
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['email', 'password'],
+                  properties: {
+                    email: { 
+                      type: 'string', 
+                      format: 'email', 
+                      example: 'newuser@example.com',
+                      description: 'Adresse email de l\'utilisateur'
+                    },
+                    password: { 
+                      type: 'string', 
+                      minLength: 6,
+                      example: 'motdepasse123',
+                      description: 'Mot de passe (minimum 6 caractères)'
+                    },
+                    display_name: { 
+                      type: 'string',
+                      example: 'John Doe',
+                      description: 'Nom d\'affichage (optionnel)'
+                    }
+                  }
+                },
+                example: {
+                  email: 'newuser@example.com',
+                  password: 'motdepasse123',
+                  display_name: 'John Doe'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Inscription réussie (avec ou sans session immédiate)',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          user: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string', format: 'uuid' },
+                              email: { type: 'string', format: 'email' },
+                              display_name: { type: 'string', nullable: true },
+                              email_confirmed: { type: 'boolean' },
+                              created_at: { type: 'string', format: 'date-time' }
+                            }
+                          },
+                          session: {
+                            type: 'object',
+                            nullable: true,
+                            properties: {
+                              access_token: { type: 'string' },
+                              refresh_token: { type: 'string' },
+                              expires_at: { type: 'integer' },
+                              expires_in: { type: 'integer' }
+                            }
+                          },
+                          message: { type: 'string', nullable: true }
+                        }
+                      }
+                    }
+                  },
+                  examples: {
+                    immediate_login: {
+                      summary: 'Inscription avec connexion immédiate',
+                      value: {
+                        success: true,
+                        data: {
+                          user: {
+                            id: '550e8400-e29b-41d4-a716-446655440000',
+                            email: 'newuser@example.com',
+                            display_name: 'John Doe',
+                            email_confirmed: true,
+                            created_at: '2025-01-15T10:30:00Z'
+                          },
+                          session: {
+                            access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                            refresh_token: 'v1.M2YwMDAwMDAwMDAwMDAwMA.refresh_token_here',
+                            expires_at: 1705312200,
+                            expires_in: 3600
+                          }
+                        }
+                      }
+                    },
+                    email_confirmation: {
+                      summary: 'Inscription avec confirmation email requise',
+                      value: {
+                        success: true,
+                        data: {
+                          user: {
+                            id: '550e8400-e29b-41d4-a716-446655440000',
+                            email: 'newuser@example.com',
+                            display_name: 'John Doe',
+                            email_confirmed: false
+                          },
+                          message: 'Inscription réussie. Vérifiez votre email pour confirmer votre compte.'
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Données invalides ou email déjà utilisé',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Error' },
+                  examples: {
+                    missing_data: {
+                      summary: 'Données manquantes',
+                      value: {
+                        success: false,
+                        error: 'Email et mot de passe requis'
+                      }
+                    },
+                    weak_password: {
+                      summary: 'Mot de passe trop faible',
+                      value: {
+                        success: false,
+                        error: 'Le mot de passe doit contenir au moins 6 caractères'
+                      }
+                    },
+                    email_exists: {
+                      summary: 'Email déjà utilisé',
+                      value: {
+                        success: false,
+                        error: 'Cette adresse email est déjà utilisée'
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            500: {
+              description: 'Erreur interne du serveur',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Error' },
+                  example: {
+                    success: false,
+                    error: 'Erreur interne du serveur'
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       '/api/auth/magic-link': {
         post: {
           tags: ['Auth'],
