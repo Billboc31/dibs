@@ -315,14 +315,10 @@ export async function getSpotifyUserInfo(accessToken?: string): Promise<SpotifyU
       
       // Handle development mode restriction
       if (response.status === 403 && errorText.includes('user may not be registered')) {
-        console.error('🚨 SPOTIFY DEV MODE: User not in allowlist. Add user to developer.spotify.com/dashboard')
-        // Return a mock user for development
-        return {
-          id: 'dev_user_' + Date.now(),
-          email: 'dev@example.com',
-          display_name: 'Development User',
-          country: 'FR'
-        }
+        console.error('🚨 SPOTIFY DEV MODE: User not in allowlist.')
+        console.error('📋 SOLUTION: Go to https://developer.spotify.com/dashboard')
+        console.error('👥 Add the user email to "Users and Access" section')
+        throw new Error('Spotify app in development mode - user not authorized. Add user to developer dashboard.')
       }
       
       throw new Error(`Spotify API error: ${response.status} - ${errorText}`)
