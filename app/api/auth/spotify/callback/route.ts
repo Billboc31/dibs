@@ -40,6 +40,9 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('✅ Tokens received, saving connection...')
+    console.log('🔑 Access token length:', tokens.accessToken.length)
+    console.log('🔑 Access token preview:', tokens.accessToken.substring(0, 30) + '...')
+    
     // Save connection to database
     const saved = await saveSpotifyConnection(tokens.accessToken, tokens.refreshToken, userId)
 

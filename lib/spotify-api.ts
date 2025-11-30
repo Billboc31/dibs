@@ -186,6 +186,13 @@ export async function saveSpotifyConnection(accessToken: string, refreshToken: s
 
     if (!platform) throw new Error('Spotify platform not found')
 
+    // Test token validity first
+    console.log('🔍 Testing access token before getting user info...')
+    const isTokenValid = await testSpotifyToken(accessToken)
+    if (!isTokenValid) {
+      throw new Error('Invalid or expired Spotify access token')
+    }
+
     // Get Spotify user info
     const spotifyUser = await getSpotifyUserInfo(accessToken)
     if (!spotifyUser) throw new Error('Failed to get Spotify user info')
@@ -263,11 +270,20 @@ async function getSpotifyToken(): Promise<string | null> {
  */
 async function testSpotifyToken(token: string): Promise<boolean> {
   try {
+    console.log('🧪 Testing Spotify token validity...')
     const response = await fetch('https://api.spotify.com/v1/me', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
+    console.log('🧪 Token test result:', response.status, response.ok)
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('🧪 Token test error:', errorText)
+    }
+    
     return response.ok
-  } catch {
+  } catch (error) {
+    console.error('🧪 Token test exception:', error)
     return false
   }
 }
@@ -277,18 +293,30 @@ async function testSpotifyToken(token: string): Promise<boolean> {
  */
 export async function getSpotifyUserInfo(accessToken?: string): Promise<SpotifyUser | null> {
   const token = accessToken || await getSpotifyToken()
-  if (!token) return null
+  if (!token) {
+    console.error('❌ No Spotify token available')
+    return null
+  }
 
   try {
+    console.log('🔍 Calling Spotify /me API...')
+    console.log('🔑 Token length:', token.length)
+    console.log('🔑 Token preview:', token.substring(0, 20) + '...')
+    
     const response = await fetch('https://api.spotify.com/v1/me', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
 
+    console.log('📡 Spotify /me response status:', response.status)
+    
     if (!response.ok) {
-      throw new Error(`Spotify API error: ${response.status}`)
+      const errorText = await response.text()
+      console.error('❌ Spotify /me error response:', errorText)
+      throw new Error(`Spotify API error: ${response.status} - ${errorText}`)
     }
 
     const data = await response.json()
+    console.log('✅ Spotify user info retrieved:', data.id, data.email)
     return data
   } catch (error) {
     console.error('❌ Error fetching Spotify user:', error)
