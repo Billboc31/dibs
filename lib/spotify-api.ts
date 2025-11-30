@@ -611,6 +611,13 @@ async function fetchSpotifyTopArtists(token: string, timeRange: 'short_term' | '
     if (!response.ok) {
       const errorText = await response.text()
       console.error(`❌ Spotify API error (${response.status}):`, errorText)
+      
+      // Handle development mode restriction for artist fetching
+      if (response.status === 403 && errorText.includes('user may not be registered')) {
+        console.error('🚨 SPOTIFY DEV MODE: User not authorized for top artists')
+        return [] // Return empty array instead of throwing
+      }
+      
       throw new Error(`Spotify API error: ${response.status}`)
     }
     const data = await response.json()
@@ -635,6 +642,13 @@ async function fetchSpotifyFollowedArtists(token: string, limit: number): Promis
     if (!response.ok) {
       const errorText = await response.text()
       console.error(`❌ Spotify API error (${response.status}):`, errorText)
+      
+      // Handle development mode restriction for artist fetching
+      if (response.status === 403 && errorText.includes('user may not be registered')) {
+        console.error('🚨 SPOTIFY DEV MODE: User not authorized for followed artists')
+        return [] // Return empty array instead of throwing
+      }
+      
       throw new Error(`Spotify API error: ${response.status}`)
     }
     const data = await response.json()
@@ -656,6 +670,13 @@ async function fetchSpotifyRecentlyPlayed(token: string, limit: number): Promise
     if (!response.ok) {
       const errorText = await response.text()
       console.error(`❌ Spotify API error (${response.status}):`, errorText)
+      
+      // Handle development mode restriction for artist fetching
+      if (response.status === 403 && errorText.includes('user may not be registered')) {
+        console.error('🚨 SPOTIFY DEV MODE: User not authorized for recently played')
+        return [] // Return empty array instead of throwing
+      }
+      
       throw new Error(`Spotify API error: ${response.status}`)
     }
     const data = await response.json()
