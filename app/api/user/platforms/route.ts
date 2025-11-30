@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
           name,
           slug,
           logo_url,
-          is_active
+          color_hex
         )
       `)
       .eq('user_id', user.id)
