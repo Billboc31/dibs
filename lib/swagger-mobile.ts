@@ -1156,6 +1156,266 @@ const register = async (email, password, displayName) => {
           }
         }
       },
+      '/api/auth/refresh': {
+        post: {
+          tags: ['Auth'],
+          summary: '🔄 P0 - Renouveler le token d\'authentification',
+          description: `**CRITIQUE** - Renouvelle un token d'authentification expiré en utilisant le refresh token. Essentiel pour maintenir la session utilisateur.
+
+## 🔐 **AUTHENTIFICATION REQUISE : NON** 
+❌ **Pas d'authentification nécessaire** - Cet endpoint sert justement à renouveler un token expiré !
+
+### 📱 **Exemple React Native complet :**
+\`\`\`javascript
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+// Fonction pour renouveler le token automatiquement
+const refreshAuthToken = async () => {
+  try {
+    const refreshToken = await AsyncStorage.getItem('refresh_token')
+    
+    if (!refreshToken) {
+      throw new Error('Aucun refresh token disponible')
+    }
+    
+    const response = await fetch('https://dibs-poc0.vercel.app/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        refresh_token: refreshToken
+      })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      // Sauvegarder les nouveaux tokens
+      await AsyncStorage.setItem('auth_token', result.data.session.access_token)
+      await AsyncStorage.setItem('refresh_token', result.data.session.refresh_token)
+      
+      console.log('✅ Token renouvelé avec succès')
+      return result.data.session.access_token
+    } else {
+      // Refresh token expiré → Rediriger vers login
+      console.log('❌ Refresh token expiré:', result.error)
+      await AsyncStorage.removeItem('auth_token')
+      await AsyncStorage.removeItem('refresh_token')
+      navigation.navigate('Login')
+      return null
+    }
+  } catch (error) {
+    console.error('Erreur refresh token:', error)
+    return null
+  }
+}
+
+// Intercepteur automatique pour les appels API
+const apiCallWithAutoRefresh = async (url, options = {}) => {
+  const authToken = await AsyncStorage.getItem('auth_token')
+  
+  // Premier appel avec le token actuel
+  let response = await fetch(url, {
+    ...options,
+    headers: {
+      'Authorization': \`Bearer \${authToken}\`,
+      'Content-Type': 'application/json',
+      ...options.headers
+    }
+  })
+  
+  // Si 401 (token expiré), essayer de renouveler
+  if (response.status === 401) {
+    console.log('🔄 Token expiré, tentative de renouvellement...')
+    
+    const newToken = await refreshAuthToken()
+    
+    if (newToken) {
+      // Retry avec le nouveau token
+      response = await fetch(url, {
+        ...options,
+        headers: {
+          'Authorization': \`Bearer \${newToken}\`,
+          'Content-Type': 'application/json',
+          ...options.headers
+        }
+      })
+    }
+  }
+  
+  return response
+}
+
+// Utilisation
+const getUserProfile = async () => {
+  try {
+    const response = await apiCallWithAutoRefresh('/api/user/profile')
+    const result = await response.json()
+    
+    if (result.success) {
+      setUserProfile(result.data.user)
+    }
+  } catch (error) {
+    console.error('Erreur profil:', error)
+  }
+}
+\`\`\`
+
+### 🔧 **Gestion des erreurs :**
+\`\`\`javascript
+const handleRefreshError = (error) => {
+  switch (error) {
+    case 'refresh_token is invalid':
+      // Refresh token expiré (après 7 jours)
+      Alert.alert('Session expirée', 'Veuillez vous reconnecter')
+      navigation.navigate('Login')
+      break
+      
+    case 'Refresh token requis':
+      // Pas de refresh token fourni
+      console.error('Erreur développeur: refresh_token manquant')
+      break
+      
+    default:
+      // Erreur réseau ou serveur
+      Alert.alert('Erreur', 'Problème de connexion')
+  }
+}
+\`\`\`
+
+### 🔧 cURL avec refresh token :
+\`\`\`bash
+curl -X POST https://dibs-poc0.vercel.app/api/auth/refresh \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "refresh_token": "v1.M2YwMDAwMDAwMDAwMDAwMA.refresh_token_here"
+  }'
+\`\`\``,
+          'x-priority': 'P0',
+          security: [], // Pas d'auth requise pour refresh
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['refresh_token'],
+                  properties: {
+                    refresh_token: { 
+                      type: 'string', 
+                      example: 'v1.M2YwMDAwMDAwMDAwMDAwMA.refresh_token_here',
+                      description: 'Refresh token obtenu lors de la connexion'
+                    }
+                  }
+                },
+                example: {
+                  refresh_token: 'v1.M2YwMDAwMDAwMDAwMDAwMA.refresh_token_here'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Token renouvelé avec succès',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          session: {
+                            type: 'object',
+                            properties: {
+                              access_token: { type: 'string', description: 'Nouveau token JWT (1 heure)' },
+                              refresh_token: { type: 'string', description: 'Nouveau refresh token (7 jours)' },
+                              expires_at: { type: 'integer', description: 'Timestamp d\'expiration' },
+                              expires_in: { type: 'integer', description: 'Durée de validité en secondes' }
+                            }
+                          },
+                          user: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string', format: 'uuid' },
+                              email: { type: 'string', format: 'email' },
+                              display_name: { type: 'string', nullable: true }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      session: {
+                        access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.NEW_TOKEN_HERE',
+                        refresh_token: 'v1.M2YwMDAwMDAwMDAwMDAwMA.NEW_REFRESH_TOKEN_HERE',
+                        expires_at: 1705315800,
+                        expires_in: 3600
+                      },
+                      user: {
+                        id: '550e8400-e29b-41d4-a716-446655440000',
+                        email: 'user@example.com',
+                        display_name: 'John Doe'
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Refresh token manquant',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Error' },
+                  example: {
+                    success: false,
+                    error: 'Refresh token requis'
+                  }
+                }
+              }
+            },
+            401: {
+              description: 'Refresh token invalide ou expiré',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Error' },
+                  examples: {
+                    expired_token: {
+                      summary: 'Refresh token expiré',
+                      value: {
+                        success: false,
+                        error: 'refresh_token is invalid'
+                      }
+                    },
+                    malformed_token: {
+                      summary: 'Token malformé',
+                      value: {
+                        success: false,
+                        error: 'Invalid refresh token format'
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            500: {
+              description: 'Erreur interne du serveur',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Error' },
+                  example: {
+                    success: false,
+                    error: 'Erreur interne du serveur'
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       '/api/auth/magic-link': {
         post: {
           tags: ['Auth'],
