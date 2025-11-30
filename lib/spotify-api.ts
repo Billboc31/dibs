@@ -58,7 +58,13 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 }
 
 function base64URLEncode(array: Uint8Array): string {
-  return btoa(String.fromCharCode.apply(null, Array.from(array)))
+  // Convert Uint8Array to string safely
+  let binary = ''
+  for (let i = 0; i < array.length; i++) {
+    binary += String.fromCharCode(array[i])
+  }
+  
+  return btoa(binary)
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=/g, '')
@@ -77,12 +83,22 @@ export async function redirectToSpotifyAuth() {
   // Generate PKCE codes
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = await generateCodeChallenge(codeVerifier)
+  
+  console.log('🔐 PKCE Generation:')
+  console.log('  - Code Verifier length:', codeVerifier.length)
+  console.log('  - Code Verifier preview:', codeVerifier.substring(0, 20) + '...')
+  console.log('  - Code Challenge:', codeChallenge)
 
   // Encode user_id and code_verifier in state
-  const state = btoa(JSON.stringify({
+  const stateData = {
     codeVerifier,
     userId: user.id
-  }))
+  }
+  const state = btoa(JSON.stringify(stateData))
+  
+  console.log('📦 State encoding:')
+  console.log('  - State data:', stateData)
+  console.log('  - State encoded length:', state.length)
 
   const scopes = [
     'user-read-email',
@@ -109,18 +125,28 @@ export async function redirectToSpotifyAuth() {
  */
 export async function getSpotifyAccessToken(code: string, codeVerifier: string): Promise<{ accessToken: string; refreshToken: string } | null> {
   try {
+    console.log('🔄 Token exchange request:')
+    console.log('  - Code length:', code.length)
+    console.log('  - Code Verifier length:', codeVerifier.length)
+    console.log('  - Code Verifier preview:', codeVerifier.substring(0, 20) + '...')
+    console.log('  - Redirect URI:', SPOTIFY_REDIRECT_URI)
+    
+    const requestBody = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: SPOTIFY_REDIRECT_URI,
+      client_id: SPOTIFY_CLIENT_ID,
+      code_verifier: codeVerifier,
+    })
+    
+    console.log('📤 Request body:', requestBody.toString())
+    
     const response = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: code,
-        redirect_uri: SPOTIFY_REDIRECT_URI,
-        client_id: SPOTIFY_CLIENT_ID,
-        code_verifier: codeVerifier,
-      }),
+      body: requestBody,
     })
 
     const data = await response.json()

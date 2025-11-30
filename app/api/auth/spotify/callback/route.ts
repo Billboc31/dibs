@@ -21,9 +21,15 @@ export async function GET(request: NextRequest) {
 
   try {
     // Decode state to get code verifier and user ID
+    console.log('📦 Decoding state:', state?.substring(0, 50) + '...')
     const stateData = state ? JSON.parse(atob(state)) : { codeVerifier: '', userId: '' }
     const codeVerifier = stateData.codeVerifier || ''
     const userId = stateData.userId || ''
+    
+    console.log('🔐 PKCE Callback:')
+    console.log('  - Code Verifier length:', codeVerifier.length)
+    console.log('  - Code Verifier preview:', codeVerifier.substring(0, 20) + '...')
+    console.log('  - User ID:', userId)
 
     if (!userId) {
       console.log('❌ No user ID in state')
