@@ -1156,7 +1156,439 @@ const register = async (email, password, displayName) => {
           }
         }
       },
-      '/api/auth/refresh': {
+      '/api/wallet/balance': {
+      get: {
+        tags: ['Wallet'],
+        summary: 'Obtenir le solde du wallet',
+        description: 'Récupère le solde actuel du portefeuille numérique de l\'utilisateur.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'AUTHENTIFICATION REQUISE',
+            in: 'header',
+            description: '🔒 **OUI** - Token Bearer obligatoire',
+            required: true,
+            schema: { type: 'string', example: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' }
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Solde récupéré avec succès',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        balance_cents: { type: 'integer', example: 15000, description: 'Solde en centimes' },
+                        balance_euros: { type: 'number', example: 150.00, description: 'Solde en euros' },
+                        currency: { type: 'string', example: 'EUR' },
+                        created_at: { type: 'string', example: '2024-01-15T10:30:00Z' },
+                        updated_at: { type: 'string', example: '2024-01-15T14:20:00Z' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/api/wallet/transactions': {
+      get: {
+        tags: ['Wallet'],
+        summary: 'Historique des transactions',
+        description: 'Récupère l\'historique des transactions du wallet avec pagination.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'AUTHENTIFICATION REQUISE',
+            in: 'header',
+            description: '🔒 **OUI** - Token Bearer obligatoire',
+            required: true,
+            schema: { type: 'string', example: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' }
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            description: 'Nombre de transactions à récupérer (défaut: 20)',
+            schema: { type: 'integer', example: 10 }
+          },
+          {
+            name: 'offset',
+            in: 'query',
+            description: 'Décalage pour la pagination (défaut: 0)',
+            schema: { type: 'integer', example: 0 }
+          },
+          {
+            name: 'type',
+            in: 'query',
+            description: 'Filtrer par type de transaction',
+            schema: { type: 'string', enum: ['recharge', 'payment', 'refund'], example: 'recharge' }
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Transactions récupérées avec succès',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        transactions: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string', example: 'uuid-transaction-id' },
+                              type: { type: 'string', example: 'recharge' },
+                              amount_cents: { type: 'integer', example: 5000 },
+                              description: { type: 'string', example: 'Recharge wallet via Stripe' },
+                              status: { type: 'string', example: 'completed' },
+                              created_at: { type: 'string', example: '2024-01-15T10:30:00Z' }
+                            }
+                          }
+                        },
+                        pagination: {
+                          type: 'object',
+                          properties: {
+                            total: { type: 'integer', example: 25 },
+                            limit: { type: 'integer', example: 10 },
+                            offset: { type: 'integer', example: 0 },
+                            has_more: { type: 'boolean', example: true }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/api/payment/create-session': {
+      post: {
+        tags: ['Paiement'],
+        summary: 'Créer une session de paiement Stripe',
+        description: 'Crée une session de checkout Stripe pour recharger le wallet. Retourne l\'URL de paiement et l\'ID de session pour le WebSocket.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'AUTHENTIFICATION REQUISE',
+            in: 'header',
+            description: '🔒 **OUI** - Token Bearer obligatoire',
+            required: true,
+            schema: { type: 'string', example: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' }
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['amount'],
+                properties: {
+                  amount: { 
+                    type: 'integer', 
+                    example: 5000,
+                    description: 'Montant en centimes (5000 = 50€)'
+                  },
+                  type: { 
+                    type: 'string', 
+                    example: 'wallet_recharge',
+                    description: 'Type de paiement'
+                  },
+                  description: { 
+                    type: 'string', 
+                    example: 'Recharge wallet DIBS - 50€',
+                    description: 'Description du paiement'
+                  }
+                }
+              },
+              examples: {
+                recharge_20: {
+                  summary: 'Recharge 20€',
+                  value: { amount: 2000, description: 'Recharge wallet - 20€' }
+                },
+                recharge_50: {
+                  summary: 'Recharge 50€',
+                  value: { amount: 5000, description: 'Recharge wallet - 50€' }
+                },
+                recharge_100: {
+                  summary: 'Recharge 100€',
+                  value: { amount: 10000, description: 'Recharge wallet - 100€' }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Session de paiement créée avec succès',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        session_id: { type: 'string', example: 'cs_test_1234567890abcdef' },
+                        checkout_url: { type: 'string', example: 'https://checkout.stripe.com/c/pay/cs_test_...' },
+                        amount: { type: 'integer', example: 5000 },
+                        type: { type: 'string', example: 'wallet_recharge' },
+                        expires_at: { type: 'string', example: '2024-01-15T11:00:00Z' },
+                        stripe_customer_id: { type: 'string', example: 'cus_1234567890' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/api/payment/ws': {
+      get: {
+        tags: ['Paiement'],
+        summary: 'WebSocket pour écouter les résultats de paiement',
+        description: `
+## 🔌 WebSocket de paiement en temps réel
+
+Ce WebSocket permet d'écouter les résultats de paiement en temps réel sans deep links.
+
+### 📱 Utilisation React Native :
+
+\`\`\`javascript
+const listenToPayment = (sessionId, email) => {
+  const eventSource = new EventSource(
+    \`\${API_URL}/api/payment/ws?session_id=\${sessionId}&email=\${email}\`
+  )
+  
+  eventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data)
+    
+    switch (data.type) {
+      case 'payment_connected':
+        console.log('🔌 Connexion WebSocket établie')
+        break
+      case 'payment_success':
+        console.log('✅ Paiement réussi !', data.amount)
+        setPaymentUrl(null) // Fermer WebView
+        refreshWalletBalance()
+        break
+      case 'payment_failed':
+        console.log('❌ Paiement échoué:', data.error)
+        Alert.alert('Erreur', 'Paiement échoué')
+        break
+      case 'payment_cancelled':
+        console.log('🚫 Paiement annulé')
+        break
+      case 'heartbeat':
+        // Maintenir la connexion
+        break
+    }
+  }
+  
+  eventSource.onerror = (error) => {
+    console.error('❌ Erreur WebSocket:', error)
+  }
+  
+  return eventSource
+}
+\`\`\`
+
+### 🔄 Flux complet :
+
+1. **Créer session** → \`/api/payment/create-session\`
+2. **Écouter WebSocket** → \`/api/payment/ws\`
+3. **Ouvrir WebView** → URL Stripe
+4. **User paie** → Interface Stripe
+5. **Webhook notifie** → Backend
+6. **WebSocket notifie** → Mobile
+7. **Fermer WebView** → Succès
+        `,
+        parameters: [
+          {
+            name: 'session_id',
+            in: 'query',
+            required: true,
+            description: 'ID de la session de paiement Stripe',
+            schema: { type: 'string', example: 'cs_test_1234567890abcdef' }
+          },
+          {
+            name: 'email',
+            in: 'query',
+            required: true,
+            description: 'Email de l\'utilisateur',
+            schema: { type: 'string', example: 'user@example.com' }
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Stream WebSocket établi - Messages en temps réel',
+            content: {
+              'text/event-stream': {
+                schema: {
+                  type: 'string',
+                  description: 'Messages Server-Sent Events',
+                  examples: {
+                    connected: {
+                      summary: 'Connexion établie',
+                      value: 'data: {"type":"payment_connected","message":"Connexion établie, en attente du paiement...","sessionId":"cs_test_123","timestamp":"2024-01-15T10:30:00Z"}'
+                    },
+                    success: {
+                      summary: 'Paiement réussi',
+                      value: 'data: {"type":"payment_success","message":"Paiement réussi !","amount":5000,"new_balance":15000,"sessionId":"cs_test_123","timestamp":"2024-01-15T10:31:00Z"}'
+                    },
+                    failed: {
+                      summary: 'Paiement échoué',
+                      value: 'data: {"type":"payment_failed","message":"Paiement échoué","error":"Card declined","sessionId":"cs_test_123","timestamp":"2024-01-15T10:31:00Z"}'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/api/payment/subscription': {
+      post: {
+        tags: ['Abonnements'],
+        summary: 'Créer un abonnement de recharge automatique',
+        description: 'Crée un abonnement Stripe pour recharger automatiquement le wallet à intervalles réguliers.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'AUTHENTIFICATION REQUISE',
+            in: 'header',
+            description: '🔒 **OUI** - Token Bearer obligatoire',
+            required: true,
+            schema: { type: 'string', example: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' }
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['amount'],
+                properties: {
+                  amount: { 
+                    type: 'integer', 
+                    example: 5000,
+                    description: 'Montant de la recharge en centimes'
+                  },
+                  frequency: { 
+                    type: 'string', 
+                    enum: ['weekly', 'monthly', 'yearly'],
+                    example: 'monthly',
+                    description: 'Fréquence de la recharge'
+                  }
+                }
+              },
+              examples: {
+                monthly_50: {
+                  summary: 'Recharge 50€/mois',
+                  value: { amount: 5000, frequency: 'monthly' }
+                },
+                weekly_20: {
+                  summary: 'Recharge 20€/semaine',
+                  value: { amount: 2000, frequency: 'weekly' }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Abonnement créé avec succès',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        subscription_id: { type: 'string', example: 'uuid-subscription-id' },
+                        stripe_subscription_id: { type: 'string', example: 'sub_1234567890' },
+                        amount: { type: 'integer', example: 5000 },
+                        frequency: { type: 'string', example: 'monthly' },
+                        status: { type: 'string', example: 'active' },
+                        next_charge_at: { type: 'string', example: '2024-02-15T10:30:00Z' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      get: {
+        tags: ['Abonnements'],
+        summary: 'Récupérer l\'abonnement actuel',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Abonnement récupéré ou null si aucun',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      oneOf: [
+                        { type: 'null' },
+                        {
+                          type: 'object',
+                          properties: {
+                            subscription_id: { type: 'string' },
+                            amount_euros: { type: 'number', example: 50.00 },
+                            frequency: { type: 'string', example: 'monthly' },
+                            status: { type: 'string', example: 'active' },
+                            next_charge_at: { type: 'string' }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      delete: {
+        tags: ['Abonnements'],
+        summary: 'Annuler l\'abonnement',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Abonnement annulé avec succès'
+          }
+        }
+      }
+    },
+    '/api/auth/refresh': {
         post: {
           tags: ['Auth'],
           summary: '🔄 P0 - Renouveler le token d\'authentification',

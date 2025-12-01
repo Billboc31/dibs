@@ -26,6 +26,20 @@ export default function ApiDocsMobilePage() {
   const [testResult, setTestResult] = useState<any>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [showOAuthDocs, setShowOAuthDocs] = useState(false)
+  
+  // États pour le WebSocket Magic Link
+  const [wsEmail, setWsEmail] = useState('')
+  const [wsMessages, setWsMessages] = useState<Array<{timestamp: string, message: string}>>([])
+  const [wsConnected, setWsConnected] = useState(false)
+  
+  // États pour le système de paiement
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paymentStatus, setPaymentStatus] = useState('')
+  const [paymentUrl, setPaymentUrl] = useState('')
+  const [customAmount, setCustomAmount] = useState('')
+  const [paymentMessages, setPaymentMessages] = useState<Array<{timestamp: string, message: string}>>([])
+  const [paymentEventSource, setPaymentEventSource] = useState<EventSource | null>(null)
 
   useEffect(() => {
     fetch('/api/docs-mobile')
@@ -48,154 +62,238 @@ export default function ApiDocsMobilePage() {
 
     return () => {
       // Cleanup
-      if (mobileContainer) {
-        mobileContainer.style.maxWidth = '480px'
-        mobileContainer.style.margin = '0 auto'
-        mobileContainer.style.boxShadow = '0 0 30px rgba(0, 0, 0, 0.1)'
+      if (paymentEventSource) {
+        paymentEventSource.close()
       }
     }
   }, [])
+
+  // Charger le solde du wallet
+  const refreshWalletBalance = async () => {
+    if (!testToken) return
+    
+    try {
+      const response = await fetch(`${spec?.servers?.[0]?.url || ''}/api/wallet/balance`, {
+        headers: {
+          'Authorization': `Bearer ${testToken}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setWalletBalance(data.data?.balance_cents || 0)
+      }
+    } catch (error) {
+      console.error('Erreur récupération solde:', error)
+    }
+  }
+
+  // Tester un paiement
+  const testPayment = async (amountCents: number) => {
+    if (!testToken || paymentLoading) return
+    
+    setPaymentLoading(true)
+    setPaymentStatus('🔄 Création de la session de paiement...')
+    setPaymentMessages([])
+    
+    try {
+      // 1. Créer session de paiement
+      const sessionResponse = await fetch(`${spec?.servers?.[0]?.url || ''}/api/payment/create-session`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${testToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ amount: amountCents })
+      })
+      
+      if (!sessionResponse.ok) {
+        throw new Error('Erreur création session')
+      }
+      
+      const sessionData = await sessionResponse.json()
+      const { session_id, checkout_url } = sessionData.data
+      
+      setPaymentStatus('✅ Session créée ! Écoute du WebSocket...')
+      setPaymentUrl(checkout_url)
+      
+      // 2. Écouter le WebSocket
+      const eventSource = new EventSource(
+        `${spec?.servers?.[0]?.url || ''}/api/payment/ws?session_id=${session_id}&email=${testEmail || 'test@example.com'}`
+      )
+      
+      setPaymentEventSource(eventSource)
+      
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        const timestamp = new Date().toLocaleTimeString()
+        
+        setPaymentMessages(prev => [...prev, {
+          timestamp,
+          message: `${data.type}: ${data.message}`
+        }])
+        
+        switch (data.type) {
+          case 'payment_connected':
+            setPaymentStatus('🔌 WebSocket connecté, en attente du paiement...')
+            break
+          case 'payment_success':
+            setPaymentStatus('✅ Paiement réussi !')
+            setPaymentUrl('')
+            refreshWalletBalance()
+            eventSource.close()
+            setPaymentLoading(false)
+            break
+          case 'payment_failed':
+            setPaymentStatus('❌ Paiement échoué')
+            setPaymentUrl('')
+            eventSource.close()
+            setPaymentLoading(false)
+            break
+          case 'payment_cancelled':
+            setPaymentStatus('🚫 Paiement annulé')
+            setPaymentUrl('')
+            eventSource.close()
+            setPaymentLoading(false)
+            break
+        }
+      }
+      
+      eventSource.onerror = () => {
+        setPaymentStatus('❌ Erreur WebSocket')
+        setPaymentLoading(false)
+      }
+      
+      // Timeout après 5 minutes
+      setTimeout(() => {
+        if (paymentLoading) {
+          eventSource.close()
+          setPaymentStatus('⏰ Timeout - Session expirée')
+          setPaymentUrl('')
+          setPaymentLoading(false)
+        }
+      }, 5 * 60 * 1000)
+      
+    } catch (error: any) {
+      setPaymentStatus(`❌ Erreur: ${error.message}`)
+      setPaymentLoading(false)
+    }
+  }
+
+  // Charger le solde au chargement du token
+  useEffect(() => {
+    if (testToken) {
+      refreshWalletBalance()
+    }
+  }, [testToken])
+
+  const testWebSocket = (email: string) => {
+    if (!email || wsConnected) return
+
+    setWsConnected(true)
+    setWsMessages([])
+
+    const eventSource = new EventSource(`${spec?.servers?.[0]?.url || ''}/api/auth/ws-complete?email=${encodeURIComponent(email)}`)
+    
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      const timestamp = new Date().toLocaleTimeString()
+      
+      setWsMessages(prev => [...prev, {
+        timestamp,
+        message: `${data.type}: ${data.message || JSON.stringify(data)}`
+      }])
+
+      if (data.type === 'authenticated' || data.type === 'timeout' || data.type === 'error') {
+        eventSource.close()
+        setWsConnected(false)
+      }
+    }
+
+    eventSource.onerror = () => {
+      setWsConnected(false)
+      setWsMessages(prev => [...prev, {
+        timestamp: new Date().toLocaleTimeString(),
+        message: 'error: Connexion fermée'
+      }])
+    }
+
+    // Timeout après 2 minutes
+    setTimeout(() => {
+      if (wsConnected) {
+        eventSource.close()
+        setWsConnected(false)
+      }
+    }, 120000)
+  }
+
+  const handleTokenChange = (value: string) => {
+    setTestToken(value)
+    localStorage.setItem('dibs_test_token', value)
+  }
+
+  const clearToken = () => {
+    setTestToken('')
+    localStorage.removeItem('dibs_test_token')
+  }
+
+  const setExampleToken = () => {
+    const exampleToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzMzMDg2Mzk5LCJpYXQiOjE3MzMwODI3OTksImlzcyI6Imh0dHBzOi8vdWlrc2JoZ29qZ3Z5dGFwZWxidXEuc3VwYWJhc2UuY28vYXV0aC92MSIsInN1YiI6IjEyMzQ1Njc4LTEyMzQtMTIzNC0xMjM0LTEyMzQ1Njc4OTAxMiIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsInBob25lIjoiIiwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiZW1haWwiLCJwcm92aWRlcnMiOlsiZW1haWwiXX0sInVzZXJfbWV0YWRhdGEiOnt9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6Im90cCIsInRpbWVzdGFtcCI6MTczMzA4Mjc5OX1dLCJzZXNzaW9uX2lkIjoiMTIzNDU2NzgtMTIzNC0xMjM0LTEyMzQtMTIzNDU2Nzg5MDEyIn0.example_signature'
+    handleTokenChange(exampleToken)
+  }
+
+  const testTokenValidity = async () => {
+    if (!testToken) return
+
+    try {
+      const response = await fetch(`${spec?.servers?.[0]?.url || ''}/api/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${testToken}`
+        }
+      })
+      
+      const result = await response.json()
+      
+      if (response.ok && result.success) {
+        const userEmail = result.data?.user?.email || result.data?.email
+        alert(`✅ Token valide !\nUtilisateur: ${userEmail || 'N/A'}`)
+      } else {
+        alert(`❌ Token invalide !\nErreur: ${result.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      alert(`❌ Erreur de test du token: ${error}`)
+    }
+  }
 
   const handleTestEndpoint = async (endpoint: Endpoint) => {
     setTestLoading(true)
     setTestResult(null)
 
     try {
-      // Construire l'URL avec les paramètres query si nécessaire
-      let url = `${spec.servers[0].url}${endpoint.path}`
+      const baseUrl = spec?.servers?.[0]?.url || ''
+      const url = `${baseUrl}${endpoint.path}`
       
-      // Pour le WebSocket complet, ajouter l'email comme paramètre
-      if (endpoint.path === '/api/auth/ws-complete' && testEmail) {
-        url += `?email=${encodeURIComponent(testEmail)}`
-      }
-
-      // Pour les WebSockets, utiliser EventSource au lieu de fetch
-      if (endpoint.path.includes('/ws')) {
-        // WebSocket complet - nécessite un email
-        if (endpoint.path === '/api/auth/ws-complete') {
-          if (!testEmail) {
-            setTestResult({
-              status: 400,
-              statusText: 'Error',
-              data: { error: 'Email requis pour le WebSocket complet' }
-            })
-            setTestLoading(false)
-            return
-          }
-        }
-        // Autres WebSockets - nécessitent un token si authentifiés
-        else if (endpoint.auth) {
-          if (!testToken) {
-            setTestResult({
-              status: 400,
-              statusText: 'Error',
-              data: { error: 'Token requis pour ce WebSocket authentifié' }
-            })
-            setTestLoading(false)
-            return
-          }
-          // Ajouter le token à l'URL pour les WebSockets authentifiés
-          url += url.includes('?') ? `&token=${encodeURIComponent(testToken)}` : `?token=${encodeURIComponent(testToken)}`
-        }
-
-        // Créer EventSource pour le WebSocket
-        const eventSource = new EventSource(url)
-        const messages: any[] = []
-        
-        eventSource.onmessage = (event) => {
-          const data = JSON.parse(event.data)
-          messages.push(data)
-          
-          setTestResult({
-            status: 200,
-            statusText: 'WebSocket Messages',
-            data: {
-              messages: messages,
-              latest: data,
-              info: 'Messages WebSocket en temps réel. Le WebSocket se ferme automatiquement après authentification ou timeout.'
-            }
-          })
-
-          // Fermer automatiquement si authentifié ou erreur
-          if (data.status === 'authenticated' || data.status === 'error' || data.status === 'timeout') {
-            eventSource.close()
-            setTestLoading(false)
-          }
-        }
-
-        eventSource.onerror = () => {
-          eventSource.close()
-          setTestResult({
-            status: 0,
-            statusText: 'WebSocket Error',
-            data: { 
-              error: 'Erreur de connexion WebSocket',
-              messages: messages
-            }
-          })
-          setTestLoading(false)
-        }
-
-        // Timeout après 60 secondes
-        setTimeout(() => {
-          eventSource.close()
-          if (testLoading) {
-            setTestResult({
-              status: 408,
-              statusText: 'Timeout',
-              data: { 
-                error: 'Timeout WebSocket (60s)',
-                messages: messages
-              }
-            })
-            setTestLoading(false)
-          }
-        }, 60000)
-
-        return
-      }
-
-      // Pour les endpoints normaux (non-WebSocket)
-      const headers: any = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       }
 
-      console.log('🔍 Debug endpoint:', {
-        path: endpoint.path,
-        method: endpoint.method,
-        auth_required: endpoint.auth,
-        token_available: !!testToken,
-        token_length: testToken?.length || 0
-      })
+      // Forcer l'ajout du token si la checkbox est cochée ou si l'endpoint nécessite une auth
+      const forceToken = localStorage.getItem('dibs_force_token') === 'true'
+      const shouldAddToken = endpoint.auth || forceToken
 
-      // Vérifier si on force l'ajout du token
-      const forceToken = localStorage.getItem('dibs_force_token') !== 'false'
-      
-      // Ajouter le token si disponible
-      const currentToken = testToken?.trim()
-      if (currentToken && (endpoint.auth || forceToken)) {
-        headers['Authorization'] = `Bearer ${currentToken}`
-        console.log('🔑 Token ajouté aux headers:', {
-          endpoint: endpoint.path,
-          token_preview: currentToken.substring(0, 30) + '...',
-          header_set: true,
-          auth_detected: endpoint.auth,
-          force_token: forceToken
-        })
-      } else if (endpoint.auth) {
-        console.error('❌ Token manquant pour endpoint authentifié')
+      if (shouldAddToken && testToken) {
+        headers['Authorization'] = `Bearer ${testToken}`
+      }
+
+      // Validation côté client pour les endpoints authentifiés
+      if (endpoint.auth && !testToken) {
         setTestResult({
           status: 400,
           statusText: 'Client Error',
           data: { 
-            error: 'Token Bearer requis pour cet endpoint. Configurez-le dans la section "Token Bearer Global" en haut de la page.',
-            debug: {
-              endpoint: endpoint.path,
-              method: endpoint.method,
-              auth_required: endpoint.auth,
-              token_provided: false,
-              token_length: testToken?.length || 0
-            }
+            error: 'Token Bearer requis pour cet endpoint',
+            auth_detected: endpoint.auth,
+            token_present: false
           }
         })
         setTestLoading(false)
@@ -216,7 +314,9 @@ export default function ApiDocsMobilePage() {
         method: endpoint.method,
         headers,
         hasAuth: endpoint.auth,
-        hasToken: !!testToken
+        hasToken: !!testToken,
+        forceToken,
+        shouldAddToken
       })
 
       const response = await fetch(url, options)
@@ -231,7 +331,13 @@ export default function ApiDocsMobilePage() {
       setTestResult({
         status: response.status,
         statusText: response.ok ? 'Success' : 'Error',
-        data
+        data,
+        debug: {
+          auth_detected: endpoint.auth,
+          token_used: shouldAddToken ? (testToken ? 'Oui' : 'Non (manquant)') : 'Non (pas requis)',
+          force_token: forceToken,
+          headers_sent: headers
+        }
       })
     } catch (error: any) {
       setTestResult({
@@ -248,838 +354,509 @@ export default function ApiDocsMobilePage() {
     return (
       <div className="w-full h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 text-xl">Chargement...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Chargement de la documentation...</p>
         </div>
       </div>
     )
   }
 
+  // Extraire les endpoints de la spec
   const endpoints: Endpoint[] = []
   
   if (spec.paths) {
     Object.entries(spec.paths).forEach(([path, methods]: [string, any]) => {
       Object.entries(methods).forEach(([method, details]: [string, any]) => {
-        if (method !== 'parameters') {
-          // Extraire l'exemple de request body
-          let requestBodyExample = null
-          if (details.requestBody?.content?.['application/json']?.example) {
-            requestBodyExample = details.requestBody.content['application/json'].example
-          } else if (details.requestBody?.content?.['application/json']?.schema?.example) {
-            requestBodyExample = details.requestBody.content['application/json'].schema.example
-          }
-
-          // Extraire l'exemple de response
-          let responseExample = null
-          if (details.responses?.['200']?.content?.['application/json']?.example) {
-            responseExample = details.responses['200'].content['application/json'].example
-          } else if (details.responses?.['200']?.content?.['application/json']?.schema?.properties) {
-            const props = details.responses['200'].content['application/json'].schema.properties
-            if (props.data?.example) {
-              responseExample = { success: true, data: props.data.example }
-            }
-          }
-
+        if (details && typeof details === 'object') {
+          const tag = details.tags?.[0] || 'Autres'
+          const priority = tag === 'Authentification' ? 'P0' : 
+                          tag === 'Utilisateur' || tag === 'Wallet' || tag === 'Paiement' ? 'P1' : 'P2'
+          
           endpoints.push({
             method: method.toUpperCase(),
-            path: path,
-            tag: details.tags?.[0] || 'Other',
-            summary: details.summary || '',
+            path,
+            tag,
+            summary: details.summary || path,
             description: details.description || '',
-            priority: details['x-priority'] || 'P2',
-            auth: details.security && details.security.length > 0,
-            requestBodyExample,
-            responseExample
+            priority,
+            auth: !!details.security?.length,
+            requestBodyExample: details.requestBody?.content?.['application/json']?.examples,
+            responseExample: details.responses?.['200']?.content?.['application/json']?.examples
           })
         }
       })
     })
   }
 
-  const filteredEndpoints = endpoints.filter(ep => {
-    const matchesTag = selectedTag === 'all' || ep.tag === selectedTag
-    const matchesSearch = 
-      ep.path.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ep.summary.toLowerCase().includes(searchQuery.toLowerCase())
+  // Filtrer les endpoints
+  const filteredEndpoints = endpoints.filter(endpoint => {
+    const matchesTag = selectedTag === 'all' || endpoint.tag === selectedTag
+    const matchesSearch = endpoint.path.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         endpoint.summary.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesTag && matchesSearch
   })
 
-  const tags = ['all', ...Array.from(new Set(endpoints.map(ep => ep.tag)))]
+  // Obtenir les tags uniques
+  const tags = Array.from(new Set(endpoints.map(e => e.tag)))
 
-  const methodColors: Record<string, string> = {
-    'GET': 'bg-green-600 text-white',
-    'POST': 'bg-blue-600 text-white',
-    'PUT': 'bg-yellow-600 text-white',
-    'DELETE': 'bg-red-600 text-white',
-    'PATCH': 'bg-purple-600 text-white'
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'P0': return 'bg-red-100 text-red-800'
+      case 'P1': return 'bg-orange-100 text-orange-800'
+      case 'P2': return 'bg-gray-100 text-gray-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
   }
 
-  const priorityColors: Record<string, string> = {
-    'P0': 'bg-red-100 text-red-800',
-    'P1': 'bg-orange-100 text-orange-800',
-    'P2': 'bg-blue-100 text-blue-800'
-  }
-
-  const tagIcons: Record<string, string> = {
-    'Auth': '🔐',
-    'User': '👤',
-    'Artists': '🎤',
-    'Platforms': '🔗',
-    'QR': '📱',
-    'Events': '📅'
+  const getMethodColor = (method: string) => {
+    switch (method) {
+      case 'GET': return 'bg-green-100 text-green-800'
+      case 'POST': return 'bg-blue-100 text-blue-800'
+      case 'PUT': return 'bg-yellow-100 text-yellow-800'
+      case 'PATCH': return 'bg-purple-100 text-purple-800'
+      case 'DELETE': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50">
-      {/* Header fixe */}
-      <div className="bg-white border-b border-gray-200 py-6 px-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          📱 DIBS Mobile API Documentation
-        </h1>
-        <p className="text-gray-600 mb-4">
-          {endpoints.length} endpoints disponibles • Version {spec.info.version}
-        </p>
-        
-        {/* Barre de recherche */}
-        <input
-          type="text"
-          placeholder="Rechercher un endpoint..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full max-w-xl px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        
-        {/* Token global pour tous les tests */}
-        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <h3 className="text-sm font-bold text-blue-900 mb-2">🔑 Token Bearer Global</h3>
-          <p className="text-xs text-blue-700 mb-3">
-            Saisissez votre token Bearer ici pour l'utiliser automatiquement dans tous les webservices authentifiés.
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={testToken}
-              onChange={(e) => {
-                const newToken = e.target.value
-                setTestToken(newToken)
-                // Sauvegarder dans localStorage
-                if (newToken) {
-                  localStorage.setItem('dibs_test_token', newToken)
-                } else {
-                  localStorage.removeItem('dibs_test_token')
-                }
-              }}
-              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-              className="flex-1 px-3 py-2 border border-blue-300 rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              onClick={() => {
-                const exampleToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3Vpa3NiaGdvamd2eXRhcGVsYnVxLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIwYjNlNWZkMS0zYWIzLTQxY2QtYWIzOS04NmIxMzc2ZWNhYWYiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY0MjA0MDQ2LCJpYXQiOjE3NjQyMDA0NDYsImVtYWlsIjoiYm9jcXVldC5waWVycmVAZ21haWwuY29tIn0.EXAMPLE_TOKEN_FOR_TESTING'
-                setTestToken(exampleToken)
-                localStorage.setItem('dibs_test_token', exampleToken)
-              }}
-              className="px-3 py-2 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
-            >
-              📋 Exemple
-            </button>
-            <button
-              onClick={() => {
-                setTestToken('')
-                localStorage.removeItem('dibs_test_token')
-              }}
-              className="px-3 py-2 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
-            >
-              🗑️ Effacer
-            </button>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">📱 API Mobile DIBS</h1>
+              <p className="text-gray-600">Documentation complète pour l'application mobile</p>
+            </div>
+            <div className="text-sm text-gray-500">
+              Serveur: {spec.servers?.[0]?.url || 'N/A'}
+            </div>
           </div>
-          <div className="mt-2">
-            <label className="flex items-center gap-2 text-xs text-blue-700">
-              <input 
-                type="checkbox" 
-                defaultChecked={true}
+
+          {/* Token Bearer Global */}
+          <div className="bg-blue-50 p-4 rounded-lg mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-medium text-blue-900">🔑 Token Bearer Global</span>
+              <button
+                onClick={testTokenValidity}
+                disabled={!testToken}
+                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                🧪 Tester
+              </button>
+            </div>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                placeholder="Coller votre token Bearer ici..."
+                value={testToken}
+                onChange={(e) => handleTokenChange(e.target.value)}
+                className="flex-1 px-3 py-2 border rounded-md text-sm"
+              />
+              <button
+                onClick={setExampleToken}
+                className="px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+              >
+                Exemple
+              </button>
+              <button
+                onClick={clearToken}
+                className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+              >
+                Effacer
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="forceToken"
+                checked={localStorage.getItem('dibs_force_token') === 'true'}
                 onChange={(e) => {
-                  // Stocker la préférence
                   localStorage.setItem('dibs_force_token', e.target.checked.toString())
                 }}
+                className="rounded"
               />
-              🔧 Forcer l'ajout du token à TOUS les endpoints (même non-authentifiés)
-            </label>
+              <label htmlFor="forceToken" className="text-sm text-blue-800">
+                🔧 Forcer l'ajout du token à TOUS les endpoints
+              </label>
+            </div>
           </div>
-          {testToken && (
-            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-green-700">
-                  ✅ Token configuré: {testToken.substring(0, 40)}...
-                </p>
-                <button
-                  onClick={async () => {
-                    try {
-                      const response = await fetch(`${spec?.servers?.[0]?.url || 'https://dibs-poc0.vercel.app'}/api/auth/me`, {
-                        headers: {
-                          'Authorization': `Bearer ${testToken}`,
-                          'Content-Type': 'application/json'
-                        }
-                      })
-                      const result = await response.json()
-                      if (response.ok) {
-                        // Gérer les deux formats de réponse possibles
-                        const userEmail = result.data?.user?.email || result.data?.email || 'N/A'
-                        const userName = result.data?.user?.display_name || result.data?.display_name || 'N/A'
-                        alert(`✅ Token valide !\nUtilisateur: ${userEmail}\nNom: ${userName}`)
-                      } else {
-                        alert(`❌ Token invalide: ${result.error || 'Erreur inconnue'}`)
-                      }
-                    } catch (error) {
-                      alert(`❌ Erreur test token: ${error}`)
-                    }
-                  }}
-                  className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
-                >
-                  🧪 Tester
-                </button>
-              </div>
-              <p className="text-xs text-green-600">
-                Ce token sera automatiquement utilisé pour tous les webservices authentifiés.
-              </p>
-            </div>
-          )}
-          {!testToken && (
-            <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
-              <p className="text-xs text-yellow-700">
-                ⚠️ Aucun token configuré. Obtenez-en un via le WebSocket complet (/api/auth/ws-complete).
-              </p>
-            </div>
-          )}
-        </div>
 
-        {/* Bouton pour afficher la doc OAuth */}
-        <div className="mt-4">
-          <button
-            onClick={() => setShowOAuthDocs(!showOAuthDocs)}
-            className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all shadow-md"
-          >
-            {showOAuthDocs ? '▲ Masquer' : '▼ Voir'} la documentation OAuth Spotify
-          </button>
+          {/* Filtres */}
+          <div className="flex gap-4 items-center">
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="🔍 Rechercher un endpoint..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <select
+              value={selectedTag}
+              onChange={(e) => setSelectedTag(e.target.value)}
+              className="px-4 py-2 border rounded-lg"
+            >
+              <option value="all">Tous les tags</option>
+              {tags.map(tag => (
+                <option key={tag} value={tag}>{tag}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* Section Documentation OAuth */}
-      {showOAuthDocs && (
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-b border-green-200 px-8 py-8">
-          <div className="max-w-5xl mx-auto">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              🎵 Connexion aux plateformes de streaming (Spotify)
-            </h2>
+      {/* Contenu principal */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Guide d'authentification */}
+        <div className="bg-white rounded-lg shadow-sm border mb-6 p-6">
+          <h2 className="text-xl font-bold mb-4">🔐 Guide d'authentification</h2>
+          <div className="prose max-w-none">
+            <p className="mb-4">
+              La plupart des endpoints nécessitent un token Bearer dans le header <code>Authorization</code>.
+            </p>
             
-            <div className="bg-white rounded-lg border border-green-200 p-6 space-y-6">
-              {/* Introduction */}
+            <h3 className="text-lg font-semibold mb-2">📱 Comment obtenir un token :</h3>
+            <ol className="list-decimal list-inside mb-4 space-y-1">
+              <li>Utiliser <code>/api/auth/login</code> avec email/password</li>
+              <li>Utiliser <code>/api/auth/ws-complete</code> avec Magic Link</li>
+              <li>Le token est retourné dans la réponse : <code>access_token</code></li>
+            </ol>
+
+            <h3 className="text-lg font-semibold mb-2">🔧 Comment passer le token :</h3>
+            <div className="bg-gray-100 p-3 rounded mb-4">
+              <code>Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...</code>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">📖 Vue d'ensemble</h3>
-                <p className="text-gray-700 leading-relaxed">
-                  L'application DIBS utilise OAuth 2.0 avec PKCE pour connecter les utilisateurs à leurs plateformes de streaming.
-                  Actuellement, <strong>Spotify</strong> est supporté. Apple Music et Deezer seront disponibles prochainement.
-                </p>
-              </div>
-
-              {/* Flow OAuth */}
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-3">🔄 Flow OAuth pour Spotify</h3>
-                <div className="space-y-4">
-                  {/* Étape 1 */}
-                  <div className="flex gap-4">
-                    <div className="flex-shrink-0 w-10 h-10 bg-green-600 text-white rounded-full flex items-center justify-center font-bold">
-                      1
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-gray-900 mb-1">Générer le Code Verifier et Challenge</h4>
-                      <p className="text-sm text-gray-700 mb-2">
-                        L'application mobile doit générer un code aléatoire pour PKCE :
-                      </p>
-                      <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto">
-{`// Générer un string aléatoire de 128 caractères
-const codeVerifier = generateRandomString(128)
-
-// Créer le code challenge (SHA-256 hash)
-const codeChallenge = await sha256(codeVerifier)
-const codeChallengeBase64 = base64UrlEncode(codeChallenge)`}
-                      </pre>
-                    </div>
-                  </div>
-
-                  {/* Étape 2 */}
-                  <div className="flex gap-4">
-                    <div className="flex-shrink-0 w-10 h-10 bg-green-600 text-white rounded-full flex items-center justify-center font-bold">
-                      2
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-gray-900 mb-1">Rediriger vers Spotify</h4>
-                      <p className="text-sm text-gray-700 mb-2">
-                        Ouvrir un navigateur (WebView ou browser externe) avec l'URL d'autorisation :
-                      </p>
-                      <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto">
-{`const spotifyAuthUrl = \`https://accounts.spotify.com/authorize?
-  client_id=YOUR_SPOTIFY_CLIENT_ID
-  &response_type=code
-  &redirect_uri=${spec.servers[0].url}/api/auth/spotify/callback
-  &scope=user-read-email user-read-private user-top-read user-read-recently-played user-follow-read
-  &code_challenge_method=S256
-  &code_challenge=\${codeChallengeBase64}
-  &state=\${userId}_\${codeVerifier}\`
-
-// Ouvrir dans un navigateur
-window.open(spotifyAuthUrl, '_blank')`}
-                      </pre>
-                      <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                        <p className="text-xs text-yellow-800">
-                          ⚠️ <strong>Important :</strong> Le paramètre <code className="bg-yellow-100 px-1 rounded">state</code> doit contenir 
-                          le <code className="bg-yellow-100 px-1 rounded">userId</code> et le <code className="bg-yellow-100 px-1 rounded">codeVerifier</code> 
-                          séparés par un underscore : <code className="bg-yellow-100 px-1 rounded">userId_codeVerifier</code>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Étape 3 */}
-                  <div className="flex gap-4">
-                    <div className="flex-shrink-0 w-10 h-10 bg-green-600 text-white rounded-full flex items-center justify-center font-bold">
-                      3
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-gray-900 mb-1">Autorisation Spotify</h4>
-                      <p className="text-sm text-gray-700">
-                        L'utilisateur se connecte à Spotify et autorise l'application. 
-                        Spotify redirige ensuite vers <code className="bg-gray-100 px-1 rounded text-xs">/api/auth/spotify/callback</code>
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Étape 4 */}
-                  <div className="flex gap-4">
-                    <div className="flex-shrink-0 w-10 h-10 bg-green-600 text-white rounded-full flex items-center justify-center font-bold">
-                      4
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-gray-900 mb-1">Traitement Backend</h4>
-                      <p className="text-sm text-gray-700 mb-2">
-                        Le backend DIBS :
-                      </p>
-                      <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                        <li>Reçoit le code d'autorisation</li>
-                        <li>Échange le code contre un access_token et refresh_token</li>
-                        <li>Enregistre la connexion dans la base de données</li>
-                        <li>Synchronise automatiquement les artistes Spotify de l'utilisateur</li>
-                        <li>Redirige vers la page de connexion avec un message de succès</li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  {/* Étape 5 */}
-                  <div className="flex gap-4">
-                    <div className="flex-shrink-0 w-10 h-10 bg-green-600 text-white rounded-full flex items-center justify-center font-bold">
-                      5
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-gray-900 mb-1">Vérification de la connexion</h4>
-                      <p className="text-sm text-gray-700 mb-2">
-                        L'app mobile peut vérifier si l'utilisateur est connecté à Spotify :
-                      </p>
-                      <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto">
-{`GET ${spec.servers[0].url}/api/user/platforms
-Authorization: Bearer YOUR_JWT_TOKEN
-
-Response:
-{
-  "success": true,
-  "data": {
-    "platforms": [
-      {
-        "id": "spotify-uuid",
-        "name": "Spotify",
-        "connected_at": "2025-11-26T10:30:00Z"
-      }
-    ]
-  }
-}`}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Configuration requise */}
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-3">⚙️ Configuration Spotify requise</h3>
-                <div className="bg-blue-50 border border-blue-200 rounded p-4">
-                  <p className="text-sm text-gray-700 mb-3">
-                    Pour utiliser l'authentification Spotify, vous devez configurer une application Spotify Developer :
-                  </p>
-                  <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
-                    <li>Aller sur <a href="https://developer.spotify.com/dashboard" target="_blank" className="text-blue-600 underline">Spotify Developer Dashboard</a></li>
-                    <li>Créer une nouvelle application</li>
-                    <li>Ajouter l'URL de redirection : <code className="bg-blue-100 px-2 py-1 rounded text-xs">{spec.servers[0].url}/api/auth/spotify/callback</code></li>
-                    <li>Copier le <strong>Client ID</strong> et le <strong>Client Secret</strong></li>
-                    <li>Ajouter ces credentials dans vos variables d'environnement :
-                      <pre className="mt-2 text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto">
-{`NEXT_PUBLIC_SPOTIFY_CLIENT_ID=votre_client_id
-SPOTIFY_CLIENT_SECRET=votre_client_secret
-NEXT_PUBLIC_SPOTIFY_REDIRECT_URI=${spec.servers[0].url}/api/auth/spotify/callback`}
-                      </pre>
-                    </li>
-                  </ol>
-                </div>
-              </div>
-
-              {/* Exemple complet */}
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-3">💻 Exemple complet (React Native)</h3>
-                <pre className="text-xs bg-gray-900 text-gray-100 p-4 rounded overflow-x-auto">
-{`import * as Linking from 'expo-linking'
-import * as WebBrowser from 'expo-web-browser'
-import * as Crypto from 'expo-crypto'
-
-// Fonction pour se connecter à Spotify
-async function connectToSpotify(userId: string) {
-  // 1. Générer le code verifier
-  const codeVerifier = generateRandomString(128)
-  
-  // 2. Créer le code challenge
-  const codeChallenge = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    codeVerifier,
-    { encoding: Crypto.CryptoEncoding.BASE64 }
-  )
-  const codeChallengeBase64 = codeChallenge
-    .replace(/\\+/g, '-')
-    .replace(/\\//g, '_')
-    .replace(/=/g, '')
-
-  // 3. Construire l'URL d'autorisation
-  const params = new URLSearchParams({
-    client_id: 'YOUR_SPOTIFY_CLIENT_ID',
-    response_type: 'code',
-    redirect_uri: '${spec.servers[0].url}/api/auth/spotify/callback',
-    scope: 'user-read-email user-read-private user-top-read user-read-recently-played user-follow-read',
-    code_challenge_method: 'S256',
-    code_challenge: codeChallengeBase64,
-    state: \`\${userId}_\${codeVerifier}\`
-  })
-
-  const authUrl = \`https://accounts.spotify.com/authorize?\${params}\`
-
-  // 4. Ouvrir le navigateur
-  const result = await WebBrowser.openAuthSessionAsync(authUrl, 'your-app://callback')
-
-  if (result.type === 'success') {
-    console.log('✅ Connexion Spotify réussie!')
-    // L'app peut maintenant recharger les données utilisateur
-  }
-}
-
-function generateRandomString(length: number): string {
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let text = ''
-  for (let i = 0; i < length; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length))
-  }
-  return text
-}`}
-                </pre>
-              </div>
-
-              {/* Notes importantes */}
-              <div className="bg-purple-50 border border-purple-200 rounded p-4">
-                <h3 className="text-lg font-bold text-purple-900 mb-2">📝 Notes importantes</h3>
-                <ul className="text-sm text-purple-800 space-y-1 list-disc list-inside">
-                  <li>Le <code className="bg-purple-100 px-1 rounded">codeVerifier</code> doit être généré côté mobile et passé via le paramètre <code className="bg-purple-100 px-1 rounded">state</code></li>
-                  <li>Ne jamais stocker les tokens Spotify côté mobile, ils sont gérés par le backend</li>
-                  <li>La synchronisation des artistes est automatique après la connexion</li>
-                  <li>L'utilisateur peut se déconnecter via l'endpoint <code className="bg-purple-100 px-1 rounded">DELETE /api/user/platforms</code></li>
-                  <li>Les tokens sont automatiquement rafraîchis par le backend quand nécessaire</li>
+                <h4 className="font-medium mb-2">✅ Endpoints SANS authentification :</h4>
+                <ul className="text-sm space-y-1">
+                  <li>• <code>/api/auth/login</code></li>
+                  <li>• <code>/api/auth/register</code></li>
+                  <li>• <code>/api/auth/ws-complete</code></li>
                 </ul>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Contenu principal */}
-      <div className="flex">
-        {/* Sidebar */}
-        <div className="w-64 bg-white border-r border-gray-200 p-6">
-          <h3 className="font-bold text-gray-900 mb-4">Catégories</h3>
-          <div className="space-y-2">
-            {tags.map(tag => {
-              const count = tag === 'all' 
-                ? endpoints.length 
-                : endpoints.filter(ep => ep.tag === tag).length
-              const icon = tag === 'all' ? '📋' : tagIcons[tag] || '📌'
-              
-              return (
-                <button
-                  key={tag}
-                  onClick={() => setSelectedTag(tag)}
-                  className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
-                    selectedTag === tag
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">
-                      {icon} {tag === 'all' ? 'Tous' : tag}
-                    </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      selectedTag === tag 
-                        ? 'bg-white/20 text-white' 
-                        : 'bg-gray-200 text-gray-600'
-                    }`}>
-                      {count}
-                    </span>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Légende priorités */}
-          <div className="mt-8 p-4 bg-gray-50 rounded-lg">
-            <h4 className="font-bold text-gray-900 mb-3 text-sm">Priorités</h4>
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-1 bg-red-100 text-red-800 rounded font-medium">P0</span>
-                <span className="text-gray-600">Critique</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded font-medium">P1</span>
-                <span className="text-gray-600">Important</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded font-medium">P2</span>
-                <span className="text-gray-600">Optionnel</span>
+              <div>
+                <h4 className="font-medium mb-2">🔒 Endpoints AVEC authentification :</h4>
+                <ul className="text-sm space-y-1">
+                  <li>• <code>/api/auth/me</code></li>
+                  <li>• <code>/api/wallet/*</code></li>
+                  <li>• <code>/api/payment/*</code></li>
+                  <li>• <code>/api/user/*</code></li>
+                </ul>
               </div>
             </div>
           </div>
         </div>
 
         {/* Liste des endpoints */}
-        <div className="flex-1 p-8 pb-20">
-          {filteredEndpoints.length === 0 ? (
-            <div className="text-center py-20">
-              <div className="text-6xl mb-4">🔍</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">
-                Aucun endpoint trouvé
-              </h3>
-              <p className="text-gray-600">
-                Modifiez votre recherche ou changez de catégorie
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4 max-w-5xl">
-              {filteredEndpoints.map((endpoint, index) => {
-                const endpointKey = `${endpoint.method}-${endpoint.path}`
-                const isExpanded = expandedEndpoint === endpointKey
-                const isTesting = testingEndpoint === endpointKey
-                
-                return (
-                  <div
-                    key={index}
-                    className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow"
-                  >
-                    {/* Header de l'endpoint */}
-                    <div className="flex items-start gap-4 mb-3">
-                      <span className={`px-3 py-1 rounded font-bold text-sm ${methodColors[endpoint.method] || 'bg-gray-600 text-white'}`}>
-                        {endpoint.method}
-                      </span>
-                      <code className="flex-1 text-gray-900 font-mono text-sm bg-gray-50 px-3 py-1 rounded border border-gray-200">
-                        {endpoint.path}
-                      </code>
-                      <span className={`px-3 py-1 rounded text-xs font-bold ${priorityColors[endpoint.priority]}`}>
-                        {endpoint.priority}
+        <div className="space-y-4">
+          {filteredEndpoints.map((endpoint, index) => (
+            <div key={`${endpoint.method}-${endpoint.path}`} className="bg-white rounded-lg shadow-sm border">
+              <div 
+                className="p-4 cursor-pointer hover:bg-gray-50"
+                onClick={() => setExpandedEndpoint(
+                  expandedEndpoint === `${endpoint.method}-${endpoint.path}` 
+                    ? null 
+                    : `${endpoint.method}-${endpoint.path}`
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-1 text-xs font-medium rounded ${getMethodColor(endpoint.method)}`}>
+                      {endpoint.method}
+                    </span>
+                    <span className={`px-2 py-1 text-xs font-medium rounded ${getPriorityColor(endpoint.priority)}`}>
+                      {endpoint.priority}
+                    </span>
+                    <code className="text-sm font-mono">{endpoint.path}</code>
+                    {endpoint.auth && <span className="text-red-600 text-xs">🔒 Auth</span>}
+                    {endpoint.requestBodyExample && <span className="text-blue-600 text-xs">📝 Avec exemple</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">{endpoint.summary}</span>
+                    <span className="text-gray-400">
+                      {expandedEndpoint === `${endpoint.method}-${endpoint.path}` ? '▼' : '▶'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {expandedEndpoint === `${endpoint.method}-${endpoint.path}` && (
+                <div className="border-t p-4">
+                  <div className="mb-4">
+                    <h3 className="font-semibold mb-2">📋 Description</h3>
+                    <div className="text-gray-700 whitespace-pre-wrap">{endpoint.description}</div>
+                  </div>
+
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-medium">AUTHENTIFICATION REQUISE :</span>
+                      <span className={`px-2 py-1 text-xs rounded ${endpoint.auth ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                        {endpoint.auth ? '🔒 OUI' : '✅ NON'}
                       </span>
                     </div>
-
-                    {/* Description */}
-                    <p className="text-gray-700 mb-3">
-                      {endpoint.summary}
-                    </p>
-
-                    {/* Badges et boutons */}
-                    <div className="flex items-center gap-2 justify-between">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium">
-                          {tagIcons[endpoint.tag] || '📌'} {endpoint.tag}
-                        </span>
-                        {endpoint.auth && (
-                          <span className={`px-3 py-1 rounded text-xs font-medium ${
-                            testToken 
-                              ? 'bg-green-100 text-green-700' 
-                              : 'bg-red-100 text-red-700'
-                          }`}>
-                            {testToken ? '🔓 Token configuré' : '🔒 Token requis'}
-                          </span>
-                        )}
-                        {endpoint.requestBodyExample && (
-                          <span className="px-3 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
-                            📝 Avec exemple
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setExpandedEndpoint(isExpanded ? null : endpointKey)}
-                          className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
-                        >
-                          {isExpanded ? '▲ Masquer' : '▼ Détails'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (!isTesting && endpoint.requestBodyExample) {
-                              setTestBody(JSON.stringify(endpoint.requestBodyExample, null, 2))
-                            }
-                            // Préremplir l'email pour le WebSocket complet
-                            if (!isTesting && endpoint.path === '/api/auth/ws-complete') {
-                              setTestEmail('user@example.com')
-                            }
-                            setTestingEndpoint(isTesting ? null : endpointKey)
-                            setTestResult(null)
-                          }}
-                          className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700"
-                        >
-                          🧪 Tester
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Détails étendus */}
-                    {isExpanded && (
-                      <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1 font-medium">URL complète:</p>
-                          <code className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded block">
-                            {spec.servers[0].url}{endpoint.path}
-                          </code>
-                        </div>
-
-                        {endpoint.auth && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1 font-medium">Headers requis:</p>
-                            <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto">
-{`Authorization: Bearer YOUR_JWT_TOKEN
-Content-Type: application/json`}
-                            </pre>
-                          </div>
-                        )}
-
-                        {endpoint.requestBodyExample && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1 font-medium">📝 Exemple de requête (Body):</p>
-                            <pre className="text-xs bg-green-900 text-green-100 p-3 rounded overflow-x-auto">
-                              {JSON.stringify(endpoint.requestBodyExample, null, 2)}
-                            </pre>
-                            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
-                              <p className="text-xs text-green-800">
-                                💡 Copiez cet exemple et modifiez les valeurs selon vos besoins
-                              </p>
-                            </div>
-                          </div>
-                        )}
-
-                        {endpoint.responseExample && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1 font-medium">✅ Exemple de réponse:</p>
-                            <pre className="text-xs bg-blue-900 text-blue-100 p-3 rounded overflow-x-auto">
-                              {JSON.stringify(endpoint.responseExample, null, 2)}
-                            </pre>
-                          </div>
-                        )}
-
-                        {/* Curl example */}
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1 font-medium">🔧 Exemple cURL:</p>
-                          <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto">
-{`curl -X ${endpoint.method} ${spec.servers[0].url}${endpoint.path} \\
-${endpoint.auth ? `  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\\n` : ''}  -H "Content-Type: application/json"${endpoint.requestBodyExample ? ` \\\n  -d '${JSON.stringify(endpoint.requestBodyExample, null, 2)}'` : ''}`}
-                          </pre>
-                        </div>
+                    {endpoint.auth && (
+                      <div className="text-sm text-gray-600 bg-yellow-50 p-2 rounded">
+                        💡 Cet endpoint nécessite un token Bearer dans le header Authorization
                       </div>
                     )}
+                  </div>
 
-                    {/* Zone de test */}
-                    {isTesting && (
-                      <div className="mt-4 pt-4 border-t border-gray-100 bg-gray-50 p-4 rounded-lg">
-                        <h4 className="font-bold text-gray-900 mb-3 text-sm">🧪 Tester l'endpoint</h4>
-                        
-                        {/* Champ email spécial pour WebSocket complet */}
-                        {endpoint.path === '/api/auth/ws-complete' && (
-                          <div className="mb-3">
-                            <label className="block text-xs text-gray-700 mb-1 font-medium">
-                              📧 Email (requis pour WebSocket):
-                            </label>
-                            <input
-                              type="email"
-                              value={testEmail}
-                              onChange={(e) => setTestEmail(e.target.value)}
-                              placeholder="user@example.com"
-                              className="w-full px-3 py-2 border border-gray-300 rounded text-xs"
-                            />
-                            <p className="mt-1 text-xs text-blue-600">
-                              ⚡ Le WebSocket enverra automatiquement un Magic Link à cet email
-                            </p>
-                            <p className="mt-1 text-xs text-gray-500">
-                              🔓 Aucune authentification requise - Ce WebSocket sert à obtenir le token
-                            </p>
+                  {/* Exemples de requête */}
+                  {endpoint.requestBodyExample && (
+                    <div className="mb-4">
+                      <h4 className="font-medium mb-2">📤 Exemples de requête</h4>
+                      <div className="space-y-2">
+                        {Object.entries(endpoint.requestBodyExample).map(([key, example]: [string, any]) => (
+                          <div key={key} className="border rounded p-3">
+                            <div className="font-medium text-sm mb-1">{example.summary}</div>
+                            <pre className="bg-gray-100 p-2 rounded text-sm overflow-x-auto">
+                              {JSON.stringify(example.value, null, 2)}
+                            </pre>
                           </div>
-                        )}
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                        {/* Info authentification WebSocket */}
-                        {endpoint.path.includes('/ws') && endpoint.path !== '/api/auth/ws-complete' && (
-                          <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                            <p className="text-xs text-yellow-800 font-medium mb-2">
-                              ⚠️ WebSocket avec authentification Bearer
-                            </p>
-                            <p className="text-xs text-yellow-700 mb-2">
-                              EventSource ne supporte pas les headers Authorization. 
-                              Le Bearer token sera passé dans l'URL : <code className="bg-yellow-100 px-1 rounded">?token=YOUR_JWT_TOKEN</code>
-                            </p>
-                            {endpoint.auth && testToken && (
-                              <div className="text-xs text-green-700 space-y-1">
-                                <p>✅ Bearer token sera ajouté automatiquement à l'URL</p>
-                                <p className="font-mono bg-green-100 p-1 rounded">
-                                  URL finale: {spec.servers[0].url}{endpoint.path}?token={testToken.substring(0, 20)}...
-                                </p>
-                              </div>
-                            )}
-                            {endpoint.auth && !testToken && (
-                              <p className="text-xs text-red-700">
-                                ❌ Saisissez votre Bearer token ci-dessous pour tester ce WebSocket
-                              </p>
-                            )}
-                          </div>
+                  {/* Section de test */}
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-medium">🧪 Tester cet endpoint</h4>
+                      <button
+                        onClick={() => setTestingEndpoint(
+                          testingEndpoint === `${endpoint.method}-${endpoint.path}` 
+                            ? null 
+                            : `${endpoint.method}-${endpoint.path}`
                         )}
-                        
-                        {endpoint.auth && (
-                          <div className="mb-3">
-                            {testToken ? (
-                              <div className="p-3 bg-green-50 border border-green-200 rounded">
-                                <p className="text-xs text-green-700 font-medium mb-1">
-                                  ✅ Bearer Token configuré (global)
-                                </p>
-                                <p className="text-xs text-green-600">
-                                  Token: {testToken.substring(0, 40)}...
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Ce token sera automatiquement ajouté au header Authorization
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="p-3 bg-red-50 border border-red-200 rounded">
-                                <p className="text-xs text-red-700 font-medium mb-1">
-                                  ❌ Bearer Token requis
-                                </p>
-                                <p className="text-xs text-red-600">
-                                  Configurez votre token dans la section "Token Bearer Global" en haut de la page.
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  💡 Obtenez un token via le WebSocket complet (/api/auth/ws-complete)
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                      >
+                        {testingEndpoint === `${endpoint.method}-${endpoint.path}` ? 'Masquer' : 'Tester'}
+                      </button>
+                    </div>
 
-                        {endpoint.method !== 'GET' && endpoint.method !== 'DELETE' && (
-                          <div className="mb-3">
-                            <label className="block text-xs text-gray-700 mb-1 font-medium">
-                              Body (JSON):
-                            </label>
+                    {testingEndpoint === `${endpoint.method}-${endpoint.path}` && (
+                      <div className="space-y-3">
+                        {(endpoint.method === 'POST' || endpoint.method === 'PUT' || endpoint.method === 'PATCH') && (
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Corps de la requête (JSON)</label>
                             <textarea
                               value={testBody}
                               onChange={(e) => setTestBody(e.target.value)}
-                              rows={8}
-                              className="w-full px-3 py-2 border border-gray-300 rounded text-xs font-mono"
+                              className="w-full px-3 py-2 border rounded-md font-mono text-sm"
+                              rows={4}
                               placeholder='{"key": "value"}'
                             />
-                            {endpoint.requestBodyExample && (
-                              <p className="mt-1 text-xs text-green-600">
-                                ✅ Exemple prérempli - modifiez les valeurs selon vos besoins
-                              </p>
-                            )}
                           </div>
                         )}
 
                         <button
                           onClick={() => handleTestEndpoint(endpoint)}
-                          disabled={
-                            testLoading || 
-                            (endpoint.path === '/api/auth/ws-complete' && !testEmail) ||
-                            (endpoint.auth && endpoint.path !== '/api/auth/ws-complete' && !testToken)
-                          }
-                          className="w-full px-4 py-2 bg-green-600 text-white rounded font-medium hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                          disabled={testLoading}
+                          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
                         >
-                          {testLoading 
-                            ? (endpoint.path === '/api/auth/ws-complete' ? '⚡ WebSocket actif...' : '⏳ Envoi...')
-                            : endpoint.path === '/api/auth/ws-complete' 
-                              ? '🚀 Démarrer WebSocket Complet'
-                              : `🚀 Envoyer ${endpoint.method} request`
-                          }
+                          {testLoading ? '⏳ Test en cours...' : '🚀 Envoyer la requête'}
                         </button>
-                        
-                        {/* Bouton d'arrêt pour WebSocket */}
-                        {testLoading && endpoint.path === '/api/auth/ws-complete' && (
-                          <button
-                            onClick={() => {
-                              setTestLoading(false)
-                              setTestResult({
-                                status: 0,
-                                statusText: 'Stopped',
-                                data: { message: 'WebSocket arrêté manuellement' }
-                              })
-                            }}
-                            className="w-full mt-2 px-4 py-2 bg-red-600 text-white rounded font-medium hover:bg-red-700"
-                          >
-                            🛑 Arrêter WebSocket
-                          </button>
-                        )}
 
                         {testResult && (
-                          <div className="mt-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <h5 className="font-bold text-gray-900 text-sm">Résultat:</h5>
-                              <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                testResult.status >= 200 && testResult.status < 300
-                                  ? 'bg-green-100 text-green-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {testResult.status} {testResult.statusText}
-                              </span>
-                            </div>
-                            
-                            {/* Afficher les infos de debug */}
-                            {endpoint.auth && (
-                              <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded">
-                                <p className="text-xs text-blue-700 font-medium">Debug Info:</p>
-                                <p className="text-xs text-blue-600">
-                                  Token utilisé: {testToken ? `${testToken.substring(0, 20)}...` : 'Aucun'}
-                                </p>
-                                <p className="text-xs text-blue-600">
-                                  Header Authorization: {testToken ? '✅ Ajouté' : '❌ Manquant'}
-                                </p>
+                          <div className="mt-3">
+                            <div className={`p-3 rounded-md ${testResult.status < 400 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-medium">Statut:</span>
+                                <span className={`px-2 py-1 text-xs rounded ${testResult.status < 400 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                  {testResult.status} {testResult.statusText}
+                                </span>
                               </div>
-                            )}
-                            
-                            <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto max-h-64">
-                              {JSON.stringify(testResult.data, null, 2)}
-                            </pre>
+                              
+                              {testResult.debug && (
+                                <div className="mb-2 p-2 bg-gray-100 rounded text-sm">
+                                  <div className="font-medium mb-1">🔧 Debug Info:</div>
+                                  <div>Auth détectée: {testResult.debug.auth_detected ? 'Oui' : 'Non'}</div>
+                                  <div>Token utilisé: {testResult.debug.token_used}</div>
+                                  <div>Force token: {testResult.debug.force_token ? 'Oui' : 'Non'}</div>
+                                </div>
+                              )}
+                              
+                              <pre className="bg-gray-100 p-2 rounded text-sm overflow-x-auto">
+                                {JSON.stringify(testResult.data, null, 2)}
+                              </pre>
+                            </div>
                           </div>
                         )}
                       </div>
                     )}
                   </div>
-                )
-              })}
+
+                  {/* Test WebSocket Magic Link */}
+                  {endpoint.path === '/api/auth/ws-complete' && (
+                    <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                      <h4 className="font-medium text-blue-900 mb-2">🧪 Test WebSocket Magic Link</h4>
+                      <div className="space-y-2">
+                        <input
+                          type="email"
+                          placeholder="Email pour le test"
+                          value={wsEmail}
+                          onChange={(e) => setWsEmail(e.target.value)}
+                          className="w-full px-3 py-2 border rounded-md"
+                        />
+                        <button
+                          onClick={() => testWebSocket(wsEmail)}
+                          disabled={!wsEmail || wsConnected}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {wsConnected ? 'WebSocket Connecté' : 'Tester WebSocket'}
+                        </button>
+                        {wsMessages.length > 0 && (
+                          <div className="mt-2 p-2 bg-gray-100 rounded text-sm max-h-40 overflow-y-auto">
+                            {wsMessages.map((msg, i) => (
+                              <div key={i} className="mb-1">
+                                <span className="text-gray-500">{msg.timestamp}</span>: {msg.message}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Test Wallet & Paiement */}
+                  {(endpoint.path === '/api/payment/create-session' || endpoint.path === '/api/wallet/balance') && (
+                    <div className="mt-4 p-4 bg-green-50 rounded-lg">
+                      <h4 className="font-medium text-green-900 mb-3">💳 Test Système de Paiement</h4>
+                      
+                      {/* Solde actuel */}
+                      <div className="mb-4 p-3 bg-white rounded border">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-medium">Solde Wallet:</span>
+                          <button
+                            onClick={refreshWalletBalance}
+                            className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+                          >
+                            🔄 Actualiser
+                          </button>
+                        </div>
+                        <div className="text-2xl font-bold text-green-600">
+                          {walletBalance !== null ? `${(walletBalance / 100).toFixed(2)}€` : 'Chargement...'}
+                        </div>
+                      </div>
+
+                      {/* Boutons de recharge */}
+                      <div className="space-y-2">
+                        <h5 className="font-medium">Recharger le wallet:</h5>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            onClick={() => testPayment(2000)}
+                            disabled={paymentLoading}
+                            className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                          >
+                            +20€
+                          </button>
+                          <button
+                            onClick={() => testPayment(5000)}
+                            disabled={paymentLoading}
+                            className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                          >
+                            +50€
+                          </button>
+                          <button
+                            onClick={() => testPayment(10000)}
+                            disabled={paymentLoading}
+                            className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                          >
+                            +100€
+                          </button>
+                        </div>
+                        
+                        {/* Montant personnalisé */}
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            placeholder="Montant en €"
+                            value={customAmount}
+                            onChange={(e) => setCustomAmount(e.target.value)}
+                            className="flex-1 px-3 py-2 border rounded-md"
+                            min="1"
+                            max="500"
+                          />
+                          <button
+                            onClick={() => testPayment(parseFloat(customAmount) * 100)}
+                            disabled={paymentLoading || !customAmount}
+                            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                          >
+                            Recharger
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Status du paiement */}
+                      {paymentStatus && (
+                        <div className={`mt-3 p-2 rounded text-sm ${
+                          paymentStatus.includes('✅') ? 'bg-green-100 text-green-800' :
+                          paymentStatus.includes('❌') ? 'bg-red-100 text-red-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {paymentStatus}
+                        </div>
+                      )}
+
+                      {/* WebView de paiement simulée */}
+                      {paymentUrl && (
+                        <div className="mt-3 p-3 bg-gray-100 rounded">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium">🌐 WebView Stripe:</span>
+                            <button
+                              onClick={() => setPaymentUrl('')}
+                              className="px-2 py-1 bg-red-500 text-white text-sm rounded"
+                            >
+                              ✕ Fermer
+                            </button>
+                          </div>
+                          <div className="text-sm text-gray-600 mb-2">
+                            URL: {paymentUrl}
+                          </div>
+                          <div className="bg-white p-3 rounded border-2 border-dashed">
+                            <div className="text-center text-gray-500">
+                              📱 Interface de paiement Stripe<br/>
+                              (Ouvrirait dans une WebView sur mobile)
+                            </div>
+                            <div className="mt-2 text-xs text-gray-400">
+                              💳 Cartes de test: 4242 4242 4242 4242 (succès), 4000 0000 0000 0002 (échec)
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Messages WebSocket */}
+                      {paymentMessages.length > 0 && (
+                        <div className="mt-3">
+                          <h6 className="font-medium mb-2">📡 Messages WebSocket:</h6>
+                          <div className="bg-gray-100 p-2 rounded text-sm max-h-32 overflow-y-auto">
+                            {paymentMessages.map((msg, i) => (
+                              <div key={i} className="mb-1">
+                                <span className="text-gray-500">{msg.timestamp}</span>: {msg.message}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
+
+        {filteredEndpoints.length === 0 && (
+          <div className="text-center py-12">
+            <div className="text-gray-500 text-lg">Aucun endpoint trouvé</div>
+            <div className="text-gray-400 text-sm mt-2">Essayez de modifier vos filtres</div>
+          </div>
+        )}
       </div>
     </div>
   )
