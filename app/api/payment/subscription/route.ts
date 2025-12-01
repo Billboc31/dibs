@@ -77,6 +77,17 @@ export async function POST(request: NextRequest) {
       email: user.email!
     })
 
+    // Calculer la prochaine facturation (30 jours par défaut)
+    const nextChargeDate = new Date()
+    if (frequency === 'weekly') {
+      nextChargeDate.setDate(nextChargeDate.getDate() + 7)
+    } else if (frequency === 'yearly') {
+      nextChargeDate.setFullYear(nextChargeDate.getFullYear() + 1)
+    } else {
+      // monthly par défaut
+      nextChargeDate.setMonth(nextChargeDate.getMonth() + 1)
+    }
+
     // Sauvegarder l'abonnement dans la base
     const { data: dbSubscription, error: dbError } = await supabaseAdmin
       .from('wallet_subscriptions')
@@ -86,7 +97,7 @@ export async function POST(request: NextRequest) {
         frequency,
         external_subscription_id: subscription.id,
         status: 'active',
-        next_charge_at: new Date(subscription.current_period_end * 1000).toISOString()
+        next_charge_at: nextChargeDate.toISOString()
       })
       .select()
       .single()
@@ -345,7 +356,7 @@ export async function PATCH(request: NextRequest) {
       data: { status: newStatus }
     })
   } catch (error: any) {
-    console.error(`❌ Error ${action}ing subscription:`, error)
+    console.error('❌ Error managing subscription:', error)
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

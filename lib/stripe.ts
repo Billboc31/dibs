@@ -10,14 +10,13 @@ if (!process.env.STRIPE_SECRET_KEY) {
 
 // Initialize Stripe
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-11-20.acacia',
   typescript: true,
 })
 
 // Stripe configuration constants
 export const STRIPE_CONFIG = {
-  currency: 'eur',
-  payment_method_types: ['card'],
+  currency: 'eur' as const,
+  payment_method_types: ['card'] as const,
   success_url_template: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
   cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/cancel`,
   webhook_endpoint_secret: process.env.STRIPE_WEBHOOK_SECRET,
@@ -60,11 +59,11 @@ export async function createWalletRechargeSession(params: {
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      payment_method_types: STRIPE_CONFIG.payment_method_types,
+      payment_method_types: ['card'],
       line_items: [
         {
           price_data: {
-            currency: STRIPE_CONFIG.currency,
+            currency: 'eur',
             product_data: {
               name: description,
               description: `Recharge de ${amount / 100}€ pour votre wallet DIBS`,
@@ -135,7 +134,7 @@ export async function createWalletSubscription(params: {
     const price = await stripe.prices.create({
       product: product.id,
       unit_amount: amount,
-      currency: STRIPE_CONFIG.currency,
+      currency: 'eur',
       recurring: {
         interval: frequency === 'yearly' ? 'year' : frequency === 'weekly' ? 'week' : 'month',
       },

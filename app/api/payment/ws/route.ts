@@ -13,16 +13,21 @@ export async function GET(request: NextRequest) {
       return new Response('Missing session_id or email', { status: 400 })
     }
 
-    // Vérifier que l'utilisateur existe
-    const { data: user } = await supabaseAdmin.auth.admin.getUserByEmail(email)
-    if (!user) {
+    // Vérifier que l'utilisateur existe via la table users
+    const { data: userProfile } = await supabaseAdmin
+      .from('users')
+      .select('id, email')
+      .eq('email', email)
+      .single()
+    
+    if (!userProfile) {
       return new Response('User not found', { status: 404 })
     }
 
     console.log(`💳 Payment WebSocket connection for:`)
     console.log(`  - Session: ${sessionId}`)
     console.log(`  - Email: ${email}`)
-    console.log(`  - User ID: ${user.id}`)
+    console.log(`  - User ID: ${userProfile.id}`)
 
     // Créer le stream
     const stream = new ReadableStream({
@@ -39,7 +44,7 @@ export async function GET(request: NextRequest) {
         addPaymentConnection(sessionId, {
           controller,
           email,
-          userId: user.id,
+          userId: userProfile.id,
           sessionId,
           createdAt: new Date()
         })
