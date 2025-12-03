@@ -52,12 +52,13 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`🔗 Plateformes connectées: ${connectedPlatforms.map(p => p.streaming_platforms.name).join(', ')}`)
+    console.log(`🔗 Plateformes connectées: ${connectedPlatforms.map(p => (p.streaming_platforms as any).name).join(', ')}`)
 
     // Synchroniser les artistes pour chaque plateforme connectée
     for (const platform of connectedPlatforms) {
-      const platformName = platform.streaming_platforms.slug
-      console.log(`🎵 Synchronisation des artistes ${platform.streaming_platforms.name}...`)
+      const platformData = platform.streaming_platforms as any
+      const platformName = platformData.slug
+      console.log(`🎵 Synchronisation des artistes ${platformData.name}...`)
       
       try {
         if (platformName === 'spotify') {
@@ -67,10 +68,10 @@ export async function GET(request: NextRequest) {
         }
         // TODO: Ajouter d'autres plateformes (Apple Music, Deezer) quand elles seront implémentées
         else {
-          console.log(`⚠️ Synchronisation non implémentée pour ${platform.streaming_platforms.name}`)
+          console.log(`⚠️ Synchronisation non implémentée pour ${platformData.name}`)
         }
       } catch (error) {
-        console.error(`❌ Erreur sync ${platform.streaming_platforms.name}:`, error)
+        console.error(`❌ Erreur sync ${platformData.name}:`, error)
         // Continue même en cas d'erreur de sync
       }
     }
@@ -89,6 +90,22 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
 
     console.log(`👤 Artistes de l'utilisateur: ${count}`)
+
+    // Construire les filtres pour les plateformes connectées
+    const platformFilters = connectedPlatforms.map(p => (p.streaming_platforms as any).slug)
+    console.log(`🔍 Recherche d'artistes pour les plateformes: ${platformFilters.join(', ')}`)
+
+    // Appliquer les filtres selon les plateformes connectées
+    const orConditions = []
+    if (platformFilters.includes('spotify')) {
+      orConditions.push('spotify_id.not.is.null')
+    }
+    if (platformFilters.includes('apple_music')) {
+      orConditions.push('apple_music_id.not.is.null')
+    }
+    if (platformFilters.includes('deezer')) {
+      orConditions.push('deezer_id.not.is.null')
+    }
 
     // Si aucun artiste utilisateur, vérifier s'il y a des artistes Spotify à synchroniser
     if (count === 0) {
@@ -117,10 +134,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Construire les filtres pour les plateformes connectées
-    const platformFilters = connectedPlatforms.map(p => p.streaming_platforms.slug)
-    console.log(`🔍 Recherche d'artistes pour les plateformes: ${platformFilters.join(', ')}`)
-
     // Récupérer TOUS les artistes des plateformes connectées avec le statut de sélection
     let artistsQuery = supabaseAdmin
       .from('artists')
@@ -135,18 +148,6 @@ export async function GET(request: NextRequest) {
       `)
       .order('name')
       .range(offset, offset + limit - 1)
-
-    // Appliquer les filtres selon les plateformes connectées
-    const orConditions = []
-    if (platformFilters.includes('spotify')) {
-      orConditions.push('spotify_id.not.is.null')
-    }
-    if (platformFilters.includes('apple_music')) {
-      orConditions.push('apple_music_id.not.is.null')
-    }
-    if (platformFilters.includes('deezer')) {
-      orConditions.push('deezer_id.not.is.null')
-    }
 
     if (orConditions.length > 0) {
       artistsQuery = artistsQuery.or(orConditions.join(','))
@@ -215,7 +216,7 @@ export async function GET(request: NextRequest) {
           total_artists: totalPlatformsCount || 0,
           selected_artists: selectedCount,
           displayed_artists: artists?.length || 0,
-          connected_platforms: connectedPlatforms.map(p => p.streaming_platforms.name)
+          connected_platforms: connectedPlatforms.map(p => (p.streaming_platforms as any).name)
         }
       }
     })
