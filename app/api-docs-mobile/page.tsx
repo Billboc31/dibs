@@ -420,51 +420,7 @@ export default function ApiDocsMobilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Menu latéral fixe */}
-      <div className="w-64 bg-white border-r border-gray-200 fixed h-full overflow-y-auto z-20">
-        <div className="p-4">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">📱 Navigation</h2>
-          
-          {/* Navigation par sections */}
-          <div className="space-y-1 mb-6">
-            <a href="#auth" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">🔐 Authentification</a>
-            <a href="#user" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">👤 Utilisateur</a>
-            <a href="#artists" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">🎵 Artistes</a>
-            <a href="#events" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">🎫 Événements</a>
-            <a href="#wallet" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">💳 Wallet</a>
-            <a href="#platforms" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">🎧 Plateformes</a>
-            <a href="#qr" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">📱 QR Codes</a>
-          </div>
-
-          {/* Filtres dans le menu */}
-          <div className="border-t pt-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">🏷️ Filtres</h3>
-            <select
-              value={selectedTag}
-              onChange={(e) => setSelectedTag(e.target.value)}
-              className="w-full px-2 py-1 border rounded text-sm mb-3"
-            >
-              <option value="all">Tous les tags</option>
-              {tags.map(tag => (
-                <option key={tag} value={tag}>{tag}</option>
-              ))}
-            </select>
-            
-            <input
-              type="text"
-              placeholder="Rechercher..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-2 py-1 border rounded text-sm"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Contenu principal avec marge pour le menu */}
-      <div className="flex-1 ml-64">
-        <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -699,7 +655,7 @@ export default function ApiDocsMobilePage() {
                                   }}
                                   className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
                                 >
-                                  📋 Utiliser l'exemple
+                                  📋 Exemple
                                 </button>
                               )}
                             </div>
@@ -707,8 +663,8 @@ export default function ApiDocsMobilePage() {
                               value={testBody}
                               onChange={(e) => setTestBody(e.target.value)}
                               className="w-full px-3 py-2 border rounded-md font-mono text-sm"
-                              rows={6}
-                              placeholder={endpoint.requestBodyExample ? 'Cliquez sur "Utiliser l\'exemple" pour pré-remplir' : '{"key": "value"}'}
+                              rows={4}
+                              placeholder={endpoint.requestBodyExample ? 'Cliquez sur "Exemple" pour pré-remplir' : '{"key": "value"}'}
                             />
                           </div>
                         )}
@@ -916,8 +872,6 @@ export default function ApiDocsMobilePage() {
             <div className="text-gray-400 text-sm mt-2">Essayez de modifier vos filtres</div>
           </div>
         )}
-      </div>
-        </div>
       </div>
     </div>
   )
