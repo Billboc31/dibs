@@ -22,80 +22,128 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`🔄 Synchronisation artistes pour user: ${user.id}`)
+    console.log(`🔄 Synchronisation des stats pour les artistes sélectionnés par l'utilisateur: ${user.id}`)
 
-    // Vérifier s'il y a des artistes Spotify dans la DB
-    const { data: spotifyArtists, error: spotifyError } = await supabaseAdmin
-      .from('artists')
-      .select('id, name, spotify_id, image_url')
-      .not('spotify_id', 'is', null)
+    // Récupérer SEULEMENT les artistes que l'utilisateur a déjà sélectionnés
+    const { data: selectedArtists, error: selectedError } = await supabaseAdmin
+      .from('user_artists')
+      .select(`
+        artist_id,
+        fanitude_points,
+        last_listening_minutes,
+        artists!inner (
+          id,
+          name,
+          spotify_id,
+          image_url
+        )
+      `)
+      .eq('user_id', user.id)
 
-    if (spotifyError) {
-      console.error('❌ Erreur récupération artistes Spotify:', spotifyError)
+    if (selectedError) {
+      console.error('❌ Erreur récupération artistes sélectionnés:', selectedError)
       return NextResponse.json(
-        { success: false, error: 'Failed to fetch Spotify artists' },
+        { success: false, error: 'Failed to fetch selected artists' },
         { status: 500 }
       )
     }
 
-    if (!spotifyArtists || spotifyArtists.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: 'Aucun artiste Spotify trouvé. Connectez-vous d\'abord à Spotify via /connect-platform'
-      })
-    }
-
-    console.log(`🎵 ${spotifyArtists.length} artistes Spotify trouvés`)
-
-    // Vérifier quels artistes ne sont pas encore dans user_artists
-    const { data: existingUserArtists } = await supabaseAdmin
-      .from('user_artists')
-      .select('artist_id')
-      .eq('user_id', user.id)
-
-    const existingArtistIds = new Set(existingUserArtists?.map(ua => ua.artist_id) || [])
-    const newArtists = spotifyArtists.filter(artist => !existingArtistIds.has(artist.id))
-
-    if (newArtists.length === 0) {
+    if (!selectedArtists || selectedArtists.length === 0) {
       return NextResponse.json({
         success: true,
         data: {
-          message: 'Tous les artistes Spotify sont déjà synchronisés',
-          total_artists: spotifyArtists.length,
-          new_artists: 0
+          message: 'Aucun artiste sélectionné à synchroniser',
+          total_selected: 0,
+          updated_artists: 0
         }
       })
     }
 
-    // Ajouter les nouveaux artistes à user_artists
-    const userArtistsToInsert = newArtists.map(artist => ({
-      user_id: user.id,
-      artist_id: artist.id,
-      fanitude_points: Math.floor(Math.random() * 500) + 100, // Points aléatoires entre 100-600
-      last_listening_minutes: Math.floor(Math.random() * 1000) + 50 // Minutes aléatoires
-    }))
+    console.log(`🎵 ${selectedArtists.length} artistes sélectionnés à synchroniser`)
 
-    const { error: insertError } = await supabaseAdmin
-      .from('user_artists')
-      .insert(userArtistsToInsert)
+    // Vérifier la connexion Spotify pour récupérer les vraies stats
+    const { data: spotifyConnection } = await supabaseAdmin
+      .from('user_streaming_platforms')
+      .select(`
+        access_token, 
+        refresh_token,
+        streaming_platforms!inner (
+          name,
+          slug
+        )
+      `)
+      .eq('user_id', user.id)
+      .eq('streaming_platforms.slug', 'spotify')
+      .single()
 
-    if (insertError) {
-      console.error('❌ Erreur insertion user_artists:', insertError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to sync artists' },
-        { status: 500 }
-      )
+    if (!spotifyConnection) {
+      console.log('⚠️ Pas de connexion Spotify - mise à jour avec des valeurs simulées')
     }
 
-    console.log(`✅ ${newArtists.length} nouveaux artistes synchronisés`)
+    // Mettre à jour les stats des artistes sélectionnés
+    const updatedArtists = []
+    
+    for (const selectedArtist of selectedArtists) {
+      const artist = (selectedArtist as any).artists
+      
+      // Calculer de nouveaux points et temps d'écoute
+      // TODO: Si connexion Spotify disponible, utiliser les vraies données de l'API
+      // Pour l'instant, on simule une mise à jour des stats
+      
+      let newFanitudePoints = selectedArtist.fanitude_points
+      let newListeningMinutes = selectedArtist.last_listening_minutes
+      
+      if (spotifyConnection) {
+        // TODO: Appeler l'API Spotify pour récupérer les vraies stats
+        // Pour l'instant, on simule une augmentation
+        newFanitudePoints += Math.floor(Math.random() * 50) + 10 // +10 à +60 points
+        newListeningMinutes += Math.floor(Math.random() * 30) + 5 // +5 à +35 minutes
+      } else {
+        // Simulation sans API Spotify
+        newFanitudePoints += Math.floor(Math.random() * 20) + 5 // +5 à +25 points
+        newListeningMinutes += Math.floor(Math.random() * 15) + 2 // +2 à +17 minutes
+      }
+
+      // Mettre à jour dans user_artists
+      const { data: updatedArtist, error: updateError } = await supabaseAdmin
+        .from('user_artists')
+        .update({
+          fanitude_points: newFanitudePoints,
+          last_listening_minutes: newListeningMinutes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id)
+        .eq('artist_id', selectedArtist.artist_id)
+        .select()
+        .single()
+
+      if (updateError) {
+        console.error(`❌ Erreur mise à jour artiste ${artist.name}:`, updateError)
+        continue
+      }
+
+      updatedArtists.push({
+        artist_id: selectedArtist.artist_id,
+        artist_name: artist.name,
+        old_fanitude_points: selectedArtist.fanitude_points,
+        new_fanitude_points: newFanitudePoints,
+        old_listening_minutes: selectedArtist.last_listening_minutes,
+        new_listening_minutes: newListeningMinutes,
+        points_gained: newFanitudePoints - selectedArtist.fanitude_points,
+        minutes_gained: newListeningMinutes - selectedArtist.last_listening_minutes
+      })
+    }
+
+    console.log(`✅ ${updatedArtists.length} artistes synchronisés`)
 
     return NextResponse.json({
       success: true,
       data: {
-        message: `${newArtists.length} artistes synchronisés avec succès`,
-        total_artists: spotifyArtists.length,
-        new_artists: newArtists.length,
-        synced_artists: newArtists.map(a => ({ name: a.name, spotify_id: a.spotify_id }))
+        message: 'Stats des artistes sélectionnés mises à jour',
+        total_selected: selectedArtists.length,
+        updated_artists: updatedArtists.length,
+        spotify_connected: !!spotifyConnection,
+        updated_artists_details: updatedArtists
       }
     })
 
