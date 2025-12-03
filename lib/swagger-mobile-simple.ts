@@ -459,6 +459,223 @@ const spec = {
       }
     },
 
+    // === PLATFORMS ===
+    '/api/platforms': {
+      get: {
+        tags: ['Platforms'],
+        summary: '🎵 Liste de toutes les plateformes',
+        'x-priority': 'P0',
+        'x-auth': true,
+        security: [{ BearerAuth: [] }],
+        description: 'Retourne la liste complète des plateformes de streaming disponibles (Spotify, Apple Music, Deezer, etc.)',
+        responses: {
+          200: {
+            description: 'Liste des plateformes',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Toutes les plateformes',
+                    value: {
+                      success: true,
+                      data: [
+                        {
+                          id: '550e8400-e29b-41d4-a716-446655440001',
+                          name: 'Spotify',
+                          slug: 'spotify',
+                          logo_url: 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@v9/icons/spotify.svg',
+                          color_hex: '#1DB954',
+                          created_at: '2024-01-15T10:30:00Z',
+                          updated_at: '2024-01-15T10:30:00Z'
+                        },
+                        {
+                          id: '550e8400-e29b-41d4-a716-446655440002',
+                          name: 'Apple Music',
+                          slug: 'apple_music',
+                          logo_url: 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@v9/icons/applemusic.svg',
+                          color_hex: '#FA243C',
+                          created_at: '2024-01-15T10:30:00Z',
+                          updated_at: '2024-01-15T10:30:00Z'
+                        },
+                        {
+                          id: '550e8400-e29b-41d4-a716-446655440003',
+                          name: 'Deezer',
+                          slug: 'deezer',
+                          logo_url: 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@v9/icons/deezer.svg',
+                          color_hex: '#FEAA2D',
+                          created_at: '2024-01-15T10:30:00Z',
+                          updated_at: '2024-01-15T10:30:00Z'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Token manquant ou invalide',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Non autorisé',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    '/api/user/platforms': {
+      get: {
+        tags: ['Platforms'],
+        summary: '🔗 Plateformes connectées par l\'utilisateur',
+        'x-priority': 'P0',
+        'x-auth': true,
+        security: [{ BearerAuth: [] }],
+        description: 'Retourne les plateformes de streaming connectées par l\'utilisateur avec les détails de connexion',
+        responses: {
+          200: {
+            description: 'Plateformes connectées',
+            content: {
+              'application/json': {
+                examples: {
+                  with_platforms: {
+                    summary: 'Utilisateur avec plateformes connectées',
+                    value: {
+                      success: true,
+                      data: [
+                        {
+                          platform_id: '550e8400-e29b-41d4-a716-446655440001',
+                          connected_at: '2024-11-15T14:30:00Z',
+                          streaming_platforms: {
+                            id: '550e8400-e29b-41d4-a716-446655440001',
+                            name: 'Spotify',
+                            slug: 'spotify',
+                            logo_url: 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@v9/icons/spotify.svg',
+                            color_hex: '#1DB954'
+                          }
+                        },
+                        {
+                          platform_id: '550e8400-e29b-41d4-a716-446655440002',
+                          connected_at: '2024-11-20T09:15:00Z',
+                          streaming_platforms: {
+                            id: '550e8400-e29b-41d4-a716-446655440002',
+                            name: 'Apple Music',
+                            slug: 'apple_music',
+                            logo_url: 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@v9/icons/applemusic.svg',
+                            color_hex: '#FA243C'
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  no_platforms: {
+                    summary: 'Aucune plateforme connectée',
+                    value: {
+                      success: true,
+                      data: []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Token manquant ou invalide',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Non autorisé',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      delete: {
+        tags: ['Platforms'],
+        summary: '🗑️ Déconnecter une plateforme',
+        'x-priority': 'P1',
+        'x-auth': true,
+        security: [{ BearerAuth: [] }],
+        description: 'Déconnecte l\'utilisateur d\'une plateforme de streaming spécifique',
+        parameters: [
+          {
+            name: 'platformId',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'ID de la plateforme à déconnecter',
+            example: '550e8400-e29b-41d4-a716-446655440001'
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Plateforme déconnectée',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Déconnexion réussie',
+                    value: {
+                      success: true,
+                      message: 'Platform disconnected'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: {
+            description: 'Paramètre manquant',
+            content: {
+              'application/json': {
+                examples: {
+                  missing_param: {
+                    summary: 'platformId manquant',
+                    value: {
+                      success: false,
+                      error: 'platformId is required'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Token manquant ou invalide',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Non autorisé',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
     // === WALLET ===
     '/api/wallet/balance': {
       get: {

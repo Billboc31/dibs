@@ -788,42 +788,71 @@ export default function ApiDocsMobilePage() {
                           </div>
                         )}
 
-                        {/* Paramètres de query pour /api/user/artists */}
-                        {endpoint.path === '/api/user/artists' && endpoint.method === 'GET' && (
+                        {/* Paramètres de query pour différents endpoints */}
+                        {((endpoint.path === '/api/user/artists' && endpoint.method === 'GET') || 
+                          (endpoint.path === '/api/user/platforms' && endpoint.method === 'DELETE')) && (
                           <div className="space-y-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                            <div className="font-medium text-blue-800">📄 Paramètres de pagination</div>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Page (0, 1, 2...)
-                                </label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={queryParams.page || '0'}
-                                  onChange={(e) => setQueryParams(prev => ({ ...prev, page: e.target.value }))}
-                                  className="w-full px-3 py-2 border rounded-md text-sm"
-                                  placeholder="0"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Limite (1-50)
-                                </label>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  max="50"
-                                  value={queryParams.limit || '10'}
-                                  onChange={(e) => setQueryParams(prev => ({ ...prev, limit: e.target.value }))}
-                                  className="w-full px-3 py-2 border rounded-md text-sm"
-                                  placeholder="10"
-                                />
-                              </div>
-                            </div>
-                            <div className="text-xs text-blue-600">
-                              💡 URL finale: <code>{spec?.servers?.[0]?.url || ''}{endpoint.path}?page={queryParams.page || '0'}&limit={queryParams.limit || '10'}</code>
-                            </div>
+                            {endpoint.path === '/api/user/artists' && endpoint.method === 'GET' && (
+                              <>
+                                <div className="font-medium text-blue-800">📄 Paramètres de pagination</div>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Page (0, 1, 2...)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={queryParams.page || '0'}
+                                      onChange={(e) => setQueryParams(prev => ({ ...prev, page: e.target.value }))}
+                                      className="w-full px-3 py-2 border rounded-md text-sm"
+                                      placeholder="0"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Limite (1-50)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="50"
+                                      value={queryParams.limit || '10'}
+                                      onChange={(e) => setQueryParams(prev => ({ ...prev, limit: e.target.value }))}
+                                      className="w-full px-3 py-2 border rounded-md text-sm"
+                                      placeholder="10"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="text-xs text-blue-600">
+                                  💡 URL finale: <code>{spec?.servers?.[0]?.url || ''}{endpoint.path}?page={queryParams.page || '0'}&limit={queryParams.limit || '10'}</code>
+                                </div>
+                              </>
+                            )}
+                            
+                            {endpoint.path === '/api/user/platforms' && endpoint.method === 'DELETE' && (
+                              <>
+                                <div className="font-medium text-blue-800">🗑️ Paramètres de déconnexion</div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Platform ID
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={queryParams.platformId || ''}
+                                    onChange={(e) => setQueryParams(prev => ({ ...prev, platformId: e.target.value }))}
+                                    className="w-full px-3 py-2 border rounded-md text-sm"
+                                    placeholder="550e8400-e29b-41d4-a716-446655440001"
+                                  />
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    💡 Utilisez d'abord GET /api/user/platforms pour récupérer les IDs
+                                  </div>
+                                </div>
+                                <div className="text-xs text-blue-600">
+                                  💡 URL finale: <code>{spec?.servers?.[0]?.url || ''}{endpoint.path}?platformId={queryParams.platformId || 'PLATFORM_ID'}</code>
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
 
