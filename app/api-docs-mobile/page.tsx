@@ -29,7 +29,7 @@ export default function ApiDocsMobilePage() {
   
   // États pour le WebSocket Magic Link
   const [wsEmail, setWsEmail] = useState('')
-  const [wsMessages, setWsMessages] = useState<Array<{timestamp: string, message: string}>>([])
+  const [wsMessages, setWsMessages] = useState<Array<{timestamp: string, message: string, type?: string, data?: any}>>([])
   const [wsConnected, setWsConnected] = useState(false)
   
   // États pour le système de paiement
@@ -193,38 +193,109 @@ export default function ApiDocsMobilePage() {
     setWsConnected(true)
     setWsMessages([])
 
+    console.log('🚀 Démarrage WebSocket pour:', email)
+    
     const eventSource = new EventSource(`${spec?.servers?.[0]?.url || ''}/api/auth/ws-complete?email=${encodeURIComponent(email)}`)
     
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      const timestamp = new Date().toLocaleTimeString()
-      
+    // Ajouter message de connexion
+    setWsMessages([{
+      timestamp: new Date().toLocaleTimeString(),
+      message: '🔌 Connexion WebSocket en cours...',
+      type: 'info',
+      data: { email }
+    }])
+    
+    eventSource.onopen = () => {
+      console.log('✅ WebSocket ouvert')
       setWsMessages(prev => [...prev, {
-        timestamp,
-        message: `${data.type}: ${data.message || JSON.stringify(data)}`
+        timestamp: new Date().toLocaleTimeString(),
+        message: '✅ WebSocket connecté avec succès',
+        type: 'success',
+        data: {}
       }])
+    }
+    
+    eventSource.onmessage = (event) => {
+      console.log('📥 Message WebSocket reçu:', event.data)
+      
+      try {
+        const data = JSON.parse(event.data)
+        const timestamp = new Date().toLocaleTimeString()
+        
+        // Déterminer le type de message pour la couleur
+        let messageType = 'info'
+        if (data.status === 'error') messageType = 'error'
+        else if (data.status === 'authenticated') messageType = 'success'
+        else if (data.status === 'magic_link_sent') messageType = 'success'
+        else if (data.status === 'timeout') messageType = 'warning'
+        
+        setWsMessages(prev => [...prev, {
+          timestamp,
+          message: `${data.status || 'message'}: ${data.message || 'Données reçues'}`,
+          type: messageType,
+          data: data
+        }])
 
-      if (data.type === 'authenticated' || data.type === 'timeout' || data.type === 'error') {
-        eventSource.close()
-        setWsConnected(false)
+        // Fermer automatiquement sur certains statuts
+        if (data.status === 'authenticated') {
+          console.log('🎉 Authentification réussie, token reçu:', data.session?.access_token?.substring(0, 20) + '...')
+          setTimeout(() => {
+            eventSource.close()
+            setWsConnected(false)
+            setWsMessages(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString(),
+              message: '🔴 WebSocket fermé automatiquement (authentification réussie)',
+              type: 'info',
+              data: {}
+            }])
+          }, 2000)
+        } else if (data.status === 'timeout' || data.status === 'error') {
+          setTimeout(() => {
+            eventSource.close()
+            setWsConnected(false)
+          }, 1000)
+        }
+      } catch (e) {
+        console.error('❌ Erreur parsing JSON:', e)
+        setWsMessages(prev => [...prev, {
+          timestamp: new Date().toLocaleTimeString(),
+          message: `❌ Message non-JSON reçu: ${event.data}`,
+          type: 'error',
+          data: { raw: event.data }
+        }])
       }
     }
 
-    eventSource.onerror = () => {
+    eventSource.onerror = (error) => {
+      console.error('❌ Erreur WebSocket:', error)
       setWsConnected(false)
       setWsMessages(prev => [...prev, {
         timestamp: new Date().toLocaleTimeString(),
-        message: 'error: Connexion fermée'
+        message: '❌ Erreur de connexion WebSocket',
+        type: 'error',
+        data: { error }
       }])
     }
 
-    // Timeout après 2 minutes
-    setTimeout(() => {
+    // Timeout après 6 minutes (plus long que le serveur)
+    const timeoutId = setTimeout(() => {
       if (wsConnected) {
+        console.log('⏰ Timeout client WebSocket')
         eventSource.close()
         setWsConnected(false)
+        setWsMessages(prev => [...prev, {
+          timestamp: new Date().toLocaleTimeString(),
+          message: '⏰ Timeout client (6 minutes) - Connexion fermée',
+          type: 'warning',
+          data: {}
+        }])
       }
-    }, 120000)
+    }, 6 * 60 * 1000)
+
+    // Nettoyer le timeout si la connexion se ferme avant
+    eventSource.addEventListener('close', () => {
+      clearTimeout(timeoutId)
+    })
   }
 
   const handleTokenChange = (value: string) => {
@@ -752,20 +823,75 @@ export default function ApiDocsMobilePage() {
                           onChange={(e) => setWsEmail(e.target.value)}
                           className="w-full px-3 py-2 border rounded-md"
                         />
-                        <button
-                          onClick={() => testWebSocket(wsEmail)}
-                          disabled={!wsEmail || wsConnected}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          {wsConnected ? 'WebSocket Connecté' : 'Tester WebSocket'}
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => testWebSocket(wsEmail)}
+                            disabled={!wsEmail || wsConnected}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {wsConnected ? '🔌 WebSocket Actif' : '🚀 Démarrer WebSocket'}
+                          </button>
+                          {wsConnected && (
+                            <button
+                              onClick={() => {
+                                setWsConnected(false)
+                                setWsMessages(prev => [...prev, {
+                                  timestamp: new Date().toLocaleTimeString(),
+                                  message: '🔴 WebSocket fermé manuellement par l\'utilisateur',
+                                  type: 'warning',
+                                  data: {}
+                                }])
+                              }}
+                              className="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                            >
+                              🛑 Fermer
+                            </button>
+                          )}
+                        </div>
                         {wsMessages.length > 0 && (
-                          <div className="mt-2 p-2 bg-gray-100 rounded text-sm max-h-40 overflow-y-auto">
-                            {wsMessages.map((msg, i) => (
-                              <div key={i} className="mb-1">
-                                <span className="text-gray-500">{msg.timestamp}</span>: {msg.message}
-                              </div>
-                            ))}
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <h5 className="font-medium text-sm">📡 Messages WebSocket en temps réel:</h5>
+                              <button
+                                onClick={() => setWsMessages([])}
+                                className="px-2 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600"
+                              >
+                                🗑️ Effacer
+                              </button>
+                            </div>
+                            <div className="p-3 bg-black text-green-400 rounded text-xs max-h-60 overflow-y-auto font-mono">
+                              {wsMessages.map((msg, i) => (
+                                <div key={i} className="mb-2 border-b border-gray-700 pb-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-gray-400">[{msg.timestamp}]</span>
+                                    <span className={`px-1 rounded text-xs ${
+                                      msg.type === 'success' ? 'bg-green-600 text-white' :
+                                      msg.type === 'error' ? 'bg-red-600 text-white' :
+                                      msg.type === 'warning' ? 'bg-yellow-600 text-black' :
+                                      'bg-blue-600 text-white'
+                                    }`}>
+                                      {msg.type?.toUpperCase() || 'INFO'}
+                                    </span>
+                                  </div>
+                                  <div className="text-green-300 mb-1">{msg.message}</div>
+                                  {msg.data && Object.keys(msg.data).length > 0 && (
+                                    <details className="mt-1">
+                                      <summary className="text-gray-400 cursor-pointer text-xs hover:text-gray-300">
+                                        📋 Données JSON ({Object.keys(msg.data).length} propriétés)
+                                      </summary>
+                                      <pre className="mt-1 text-xs text-gray-300 bg-gray-800 p-2 rounded overflow-x-auto">
+                                        {JSON.stringify(msg.data, null, 2)}
+                                      </pre>
+                                    </details>
+                                  )}
+                                </div>
+                              ))}
+                              {wsConnected && (
+                                <div className="text-yellow-400 animate-pulse">
+                                  ⚡ WebSocket actif - En attente de messages...
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>

@@ -29,8 +29,16 @@ export async function GET(request: NextRequest) {
       let pingInterval: NodeJS.Timeout | null = null
       let timeout: NodeJS.Timeout | null = null
 
+      // Variable pour tracker l'état du WebSocket
+      let isClosed = false
+
       // Fonction pour envoyer des messages avec transmission forcée
       const send = (data: any) => {
+        if (isClosed) {
+          console.log('🚫 WebSocket fermé, message ignoré:', data.status || data.step)
+          return
+        }
+        
         try {
           // Format EventSource correct avec double \n\n
           const message = `data: ${JSON.stringify(data)}\n\n`
@@ -39,26 +47,38 @@ export async function GET(request: NextRequest) {
           // Forcer la transmission immédiate avec un message vide (Solution 1)
           // Cela force le navigateur/app à traiter les messages en buffer
           setTimeout(() => {
-            try {
-              controller.enqueue(encoder.encode(': heartbeat\n\n'))
-            } catch (e) {
-              // Ignore si le stream est fermé
+            if (!isClosed) {
+              try {
+                controller.enqueue(encoder.encode(': heartbeat\n\n'))
+              } catch (e) {
+                console.log('🔴 Heartbeat ignoré, WebSocket fermé')
+              }
             }
           }, 10)
           
           console.log('📡 Message envoyé:', data.status || data.step)
         } catch (error) {
           console.error('Erreur envoi message WebSocket:', error)
+          isClosed = true
         }
       }
 
       // Fonction pour fermer proprement le WebSocket
       const closeWebSocket = (reason: string) => {
+        if (isClosed) return
+        
         console.log(`🔴 Fermeture du WebSocket: ${reason}`)
+        isClosed = true
+        
         if (pingInterval) clearInterval(pingInterval)
         if (timeout) clearTimeout(timeout)
         unregisterWebSocketConnection(email)
-        controller.close()
+        
+        try {
+          controller.close()
+        } catch (e) {
+          console.log('🔴 Controller déjà fermé')
+        }
       }
 
       // 0. Message de test immédiat pour débloquer le buffer
@@ -160,24 +180,28 @@ export async function GET(request: NextRequest) {
 
       // Ping fréquent pour maintenir la connexion ET débloquer les buffers
       pingInterval = setInterval(() => {
-        send({
-          status: 'ping',
-          message: 'Connexion active, en attente du Magic Link...',
-          email: email,
-          timestamp: new Date().toISOString()
-        })
+        if (!isClosed) {
+          send({
+            status: 'ping',
+            message: 'Connexion active, en attente du Magic Link...',
+            email: email,
+            timestamp: new Date().toISOString()
+          })
+        }
       }, 2000) // Toutes les 2 secondes pour débloquer les buffers mobiles
 
       // Timeout après 5 minutes
       timeout = setTimeout(() => {
-        send({
-          status: 'timeout',
-          message: 'Timeout - Connexion fermée après 5 minutes',
-          timestamp: new Date().toISOString()
-        })
-        setTimeout(() => {
-          closeWebSocket('Timeout 5 minutes')
-        }, 100)
+        if (!isClosed) {
+          send({
+            status: 'timeout',
+            message: 'Timeout - Connexion fermée après 5 minutes',
+            timestamp: new Date().toISOString()
+          })
+          setTimeout(() => {
+            closeWebSocket('Timeout 5 minutes')
+          }, 100)
+        }
       }, 5 * 60 * 1000)
 
       // Nettoyer quand la connexion se ferme
