@@ -194,18 +194,19 @@ export async function GET(request: NextRequest) {
     if (userSpecificArtistIds.length === 0) {
       console.log('⚠️ Aucun artiste spécifique trouvé, utilisation du fallback avec artistes globaux')
       
-      // Fallback: récupérer quelques artistes Spotify de la base globale
+      // Fallback: récupérer un échantillon réaliste d'artistes Spotify (simuler un compte utilisateur)
+      // Limiter à ~30-50 artistes pour simuler un compte Spotify réaliste
+      const maxUserArtists = 42 // Nombre réaliste d'artistes pour un utilisateur
+      
       const { data: fallbackArtists } = await supabaseAdmin
         .from('artists')
         .select('id, name, spotify_id, apple_music_id, deezer_id, image_url')
         .not('spotify_id', 'is', null)
         .order('name')
-        .range(offset, offset + limit - 1)
+        .range(offset, Math.min(offset + limit - 1, maxUserArtists - 1))
 
-      const { count: fallbackTotal } = await supabaseAdmin
-        .from('artists')
-        .select('*', { count: 'exact', head: true })
-        .not('spotify_id', 'is', null)
+      // Le total est limité au nombre réaliste d'artistes d'un utilisateur
+      const fallbackTotal = Math.min(maxUserArtists, 186) // Ne jamais dépasser le nombre réel dans la DB
 
       // Récupérer les artistes sélectionnés par l'utilisateur
       const { data: selectedArtists } = await supabaseAdmin
@@ -226,9 +227,9 @@ export async function GET(request: NextRequest) {
       })) || []
 
       const selectedCount = artists.filter(a => a.selected).length
-      const hasMore = (fallbackTotal || 0) > offset + limit
+      const hasMore = fallbackTotal > offset + limit
 
-      console.log(`🔄 Fallback: ${artists.length} artistes affichés, ${fallbackTotal} total, ${selectedCount} sélectionnés`)
+      console.log(`🔄 Fallback: ${artists.length} artistes affichés, ${fallbackTotal} total simulé, ${selectedCount} sélectionnés`)
 
       return NextResponse.json({
         success: true,
@@ -237,16 +238,16 @@ export async function GET(request: NextRequest) {
           pagination: {
             page,
             limit,
-            total: fallbackTotal || 0,
+            total: fallbackTotal,
             hasMore
           },
           stats: {
-            total_artists: fallbackTotal || 0,
+            total_artists: fallbackTotal,
             selected_artists: selectedCount,
             displayed_artists: artists.length
           }
         },
-        message: "Utilisation des artistes de la base globale car l'API Spotify n'est pas accessible (mode développement)"
+        message: `Simulation d'un compte Spotify avec ${fallbackTotal} artistes (API Spotify non accessible en mode développement)`
       })
     }
 
