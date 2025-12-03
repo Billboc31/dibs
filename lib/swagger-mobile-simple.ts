@@ -324,22 +324,89 @@ const spec = {
         'x-priority': 'P0',
         'x-auth': true,
         security: [{ BearerAuth: [] }],
+        description: `
+**📄 PAGINATION - Comment récupérer les pages :**
+
+**URLs d'exemple :**
+- Page 1 : \`GET /api/user/artists?page=0&limit=10\`
+- Page 2 : \`GET /api/user/artists?page=1&limit=10\`
+- Page 3 : \`GET /api/user/artists?page=2&limit=10\`
+
+**Code JavaScript :**
+\`\`\`javascript
+// Récupérer la première page
+const response1 = await fetch('/api/user/artists?page=0&limit=10', {
+  headers: { 'Authorization': 'Bearer YOUR_TOKEN' }
+});
+
+// Récupérer la page suivante
+const response2 = await fetch('/api/user/artists?page=1&limit=10', {
+  headers: { 'Authorization': 'Bearer YOUR_TOKEN' }
+});
+
+// Vérifier s'il y a plus de pages
+const data = await response1.json();
+if (data.data.pagination.hasMore) {
+  // Il y a plus de pages à charger
+  const nextPage = data.data.pagination.page + 1;
+  const nextResponse = await fetch(\`/api/user/artists?page=\${nextPage}&limit=10\`);
+}
+\`\`\`
+
+**React Native exemple :**
+\`\`\`javascript
+const [artists, setArtists] = useState([]);
+const [page, setPage] = useState(0);
+const [hasMore, setHasMore] = useState(true);
+
+const loadArtists = async (pageNum = 0, append = false) => {
+  const response = await fetch(\`/api/user/artists?page=\${pageNum}&limit=10\`, {
+    headers: { 'Authorization': \`Bearer \${token}\` }
+  });
+  const data = await response.json();
+  
+  if (append) {
+    setArtists(prev => [...prev, ...data.data.artists]);
+  } else {
+    setArtists(data.data.artists);
+  }
+  
+  setHasMore(data.data.pagination.hasMore);
+  setPage(pageNum);
+};
+
+// Charger la page suivante (scroll infini)
+const loadMore = () => {
+  if (hasMore) {
+    loadArtists(page + 1, true);
+  }
+};
+\`\`\`
+        `,
         parameters: [
           {
             name: 'page',
             in: 'query',
             required: false,
             schema: { type: 'integer', default: 0 },
-            description: 'Numéro de page (commence à 0)',
-            example: 0
+            description: 'Numéro de page (commence à 0). Page 0 = premiers 10 artistes, Page 1 = artistes 11-20, etc.',
+            examples: {
+              first_page: { summary: 'Première page', value: 0 },
+              second_page: { summary: 'Deuxième page', value: 1 },
+              third_page: { summary: 'Troisième page', value: 2 }
+            }
           },
           {
             name: 'limit',
             in: 'query',
             required: false,
-            schema: { type: 'integer', default: 10 },
-            description: 'Nombre d\'artistes par page',
-            example: 10
+            schema: { type: 'integer', default: 10, minimum: 1, maximum: 50 },
+            description: 'Nombre d\'artistes par page (1-50)',
+            examples: {
+              small: { summary: 'Petite page', value: 5 },
+              default: { summary: 'Page normale', value: 10 },
+              large: { summary: 'Grande page', value: 20 }
+            }
           }
         ],
         responses: {
