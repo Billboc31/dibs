@@ -33,9 +33,16 @@ export async function GET(request: NextRequest) {
     // Vérifier si l'utilisateur a une connexion Spotify
     const { data: spotifyConnection } = await supabaseAdmin
       .from('user_streaming_platforms')
-      .select('access_token, refresh_token')
+      .select(`
+        access_token, 
+        refresh_token,
+        streaming_platforms!inner (
+          name,
+          slug
+        )
+      `)
       .eq('user_id', user.id)
-      .eq('platform_name', 'Spotify')
+      .eq('streaming_platforms.slug', 'spotify')
       .single()
 
     if (!spotifyConnection) {
