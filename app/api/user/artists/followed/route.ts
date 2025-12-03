@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
         last_listening_minutes,
         created_at,
         updated_at,
-        artists!inner (
+        artists (
           id,
           name,
           spotify_id,
@@ -75,18 +75,21 @@ export async function GET(request: NextRequest) {
     }
 
     // Formater les données pour la réponse
-    const artists = followedArtists?.map(ua => ({
-      id: ua.artists.id,
-      name: ua.artists.name,
-      spotify_id: ua.artists.spotify_id,
-      apple_music_id: ua.artists.apple_music_id,
-      deezer_id: ua.artists.deezer_id,
-      image_url: ua.artists.image_url,
-      fanitude_points: ua.fanitude_points,
-      last_listening_minutes: ua.last_listening_minutes,
-      followed_since: ua.created_at,
-      last_updated: ua.updated_at
-    })) || []
+    const artists = followedArtists?.map(ua => {
+      const artist = ua.artists as any // Cast pour éviter les erreurs TypeScript
+      return {
+        id: artist.id,
+        name: artist.name,
+        spotify_id: artist.spotify_id,
+        apple_music_id: artist.apple_music_id,
+        deezer_id: artist.deezer_id,
+        image_url: artist.image_url,
+        fanitude_points: ua.fanitude_points,
+        last_listening_minutes: ua.last_listening_minutes,
+        followed_since: ua.created_at,
+        last_updated: ua.updated_at
+      }
+    }) || []
 
     // Calculer les statistiques
     const totalPoints = artists.reduce((sum, artist) => sum + (artist.fanitude_points || 0), 0)
