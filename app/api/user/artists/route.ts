@@ -132,17 +132,31 @@ export async function GET(request: NextRequest) {
           const allSpotifyArtists = Array.from(artistsMap.values())
           console.log(`🎵 ${allSpotifyArtists.length} artistes Spotify uniques trouvés`)
 
-          // Récupérer les IDs de ces artistes dans notre base (s'ils existent)
+          // Upsert les artistes dans notre base puis récupérer leurs IDs
           if (allSpotifyArtists.length > 0) {
-            const spotifyIds = allSpotifyArtists.map((a: any) => a.id)
-            const { data: existingArtists } = await supabaseAdmin
-              .from('artists')
-              .select('id, spotify_id')
-              .in('spotify_id', spotifyIds)
+            console.log(`🔄 Synchronisation de ${allSpotifyArtists.length} artistes dans la base...`)
+            
+            // Préparer les données pour l'upsert
+            const artistsToUpsert = allSpotifyArtists.map((artist: any) => ({
+              spotify_id: artist.id,
+              name: artist.name,
+              image_url: artist.images?.[0]?.url || null
+            }))
 
-            if (existingArtists) {
-              userSpecificArtistIds.push(...existingArtists.map(a => a.id))
-              console.log(`✅ ${existingArtists.length} artistes Spotify trouvés dans la base`)
+            // Upsert les artistes (insert ou update si existe déjà)
+            const { data: upsertedArtists, error: upsertError } = await supabaseAdmin
+              .from('artists')
+              .upsert(artistsToUpsert, { 
+                onConflict: 'spotify_id',
+                ignoreDuplicates: false 
+              })
+              .select('id, spotify_id, name')
+
+            if (upsertError) {
+              console.error('❌ Erreur upsert artistes:', upsertError)
+            } else if (upsertedArtists) {
+              userSpecificArtistIds.push(...upsertedArtists.map(a => a.id))
+              console.log(`✅ ${upsertedArtists.length} artistes synchronisés et récupérés`)
             }
           }
         }
