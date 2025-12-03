@@ -54,49 +54,108 @@ export async function GET(request: NextRequest) {
 
     console.log(`🔗 Plateformes connectées: ${connectedPlatforms.map(p => (p.streaming_platforms as any).name).join(', ')}`)
 
-    console.log(`📊 Récupération de TOUS les artistes des plateformes connectées...`)
+    console.log(`📊 Récupération des artistes spécifiques à cet utilisateur...`)
     
     // Construire les filtres pour les plateformes connectées
     const platformFilters = connectedPlatforms.map(p => (p.streaming_platforms as any).slug)
     console.log(`🔍 Plateformes: ${platformFilters.join(', ')}`)
 
-    // Construire les conditions OR pour les plateformes connectées
-    const orConditions = []
-    if (platformFilters.includes('spotify')) {
-      orConditions.push('spotify_id.not.is.null')
-    }
-    if (platformFilters.includes('apple_music')) {
-      orConditions.push('apple_music_id.not.is.null')
-    }
-    if (platformFilters.includes('deezer')) {
-      orConditions.push('deezer_id.not.is.null')
-    }
-
-    // Vérifier d'abord s'il y a des artistes dans la table artists
-    const { count: totalArtistsCount } = await supabaseAdmin
-      .from('artists')
-      .select('*', { count: 'exact', head: true })
+    // Récupérer les artistes spécifiques à cet utilisateur depuis les APIs des plateformes
+    let userSpecificArtistIds: string[] = []
     
-    console.log(`📊 Total artistes dans la DB: ${totalArtistsCount}`)
+    // Pour Spotify : récupérer les artistes de l'utilisateur depuis l'API Spotify
+    if (platformFilters.includes('spotify')) {
+      console.log(`🎵 Récupération des artistes Spotify de l'utilisateur...`)
+      try {
+        // Récupérer le token Spotify de l'utilisateur
+        const { data: connection } = await supabaseAdmin
+          .from('user_streaming_platforms')
+          .select('access_token')
+          .eq('user_id', user.id)
+          .eq('platform_id', connectedPlatforms.find(p => (p.streaming_platforms as any).slug === 'spotify')?.platform_id)
+          .single()
 
-    // Récupérer le nombre total d'artistes de l'utilisateur
-    const { count } = await supabaseAdmin
-      .from('user_artists')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
+        if (!connection?.access_token) {
+          console.log('⚠️ Pas de token Spotify pour cet utilisateur')
+        } else {
+          // Récupérer les artistes depuis l'API Spotify
+          const [topArtists, followedArtists, recentTracks] = await Promise.all([
+            fetch(`https://api.spotify.com/v1/me/top/artists?time_range=medium_term&limit=50`, {
+              headers: { 'Authorization': `Bearer ${connection.access_token}` }
+            }).then(res => res.json()).then(data => data.items || []).catch(() => []),
+            
+            fetch(`https://api.spotify.com/v1/me/following?type=artist&limit=50`, {
+              headers: { 'Authorization': `Bearer ${connection.access_token}` }
+            }).then(res => res.json()).then(data => data.artists?.items || []).catch(() => []),
+            
+            fetch(`https://api.spotify.com/v1/me/player/recently-played?limit=50`, {
+              headers: { 'Authorization': `Bearer ${connection.access_token}` }
+            }).then(res => res.json()).then(data => data.items || []).catch(() => [])
+          ])
 
-    console.log(`👤 Artistes de l'utilisateur: ${count}`)
+          // Combiner tous les artistes et dédupliquer
+          const artistsMap = new Map()
+          topArtists.forEach(artist => artistsMap.set(artist.id, artist))
+          followedArtists.forEach(artist => artistsMap.set(artist.id, artist))
+          recentTracks.forEach(track => {
+            track.artists.forEach(artist => {
+              if (!artistsMap.has(artist.id)) {
+                artistsMap.set(artist.id, artist)
+              }
+            })
+          })
 
+          const allSpotifyArtists = Array.from(artistsMap.values())
+          console.log(`🎵 ${allSpotifyArtists.length} artistes Spotify uniques trouvés`)
 
-    // Debug: Afficher le nombre d'artistes sélectionnés par l'utilisateur
-    if (count === 0) {
-      console.log('⚠️ Aucun artiste sélectionné par l\'utilisateur')
-    } else {
-      console.log(`✅ ${count} artistes déjà sélectionnés par l\'utilisateur`)
+          // Récupérer les IDs de ces artistes dans notre base (s'ils existent)
+          if (allSpotifyArtists.length > 0) {
+            const spotifyIds = allSpotifyArtists.map((a: any) => a.id)
+            const { data: existingArtists } = await supabaseAdmin
+              .from('artists')
+              .select('id, spotify_id')
+              .in('spotify_id', spotifyIds)
+
+            if (existingArtists) {
+              userSpecificArtistIds.push(...existingArtists.map(a => a.id))
+              console.log(`✅ ${existingArtists.length} artistes Spotify trouvés dans la base`)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('⚠️ Erreur récupération artistes Spotify:', error)
+      }
     }
 
-    // Récupérer TOUS les artistes des plateformes connectées avec pagination
-    let artistsQuery = supabaseAdmin
+    // TODO: Ajouter Apple Music et Deezer quand les APIs seront disponibles
+    // if (platformFilters.includes('apple_music')) { ... }
+    // if (platformFilters.includes('deezer')) { ... }
+
+    console.log(`📊 Total artistes spécifiques à l'utilisateur: ${userSpecificArtistIds.length}`)
+
+    if (userSpecificArtistIds.length === 0) {
+      console.log('⚠️ Aucun artiste trouvé pour cet utilisateur')
+      return NextResponse.json({
+        success: true,
+        data: {
+          artists: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            hasMore: false
+          },
+          stats: {
+            total_artists: 0,
+            selected_artists: 0,
+            displayed_artists: 0
+          }
+        }
+      })
+    }
+
+    // Récupérer les artistes de l'utilisateur avec pagination
+    const { data: allArtists, error: artistsError } = await supabaseAdmin
       .from('artists')
       .select(`
         id,
@@ -107,16 +166,9 @@ export async function GET(request: NextRequest) {
         image_url,
         created_at
       `)
+      .in('id', userSpecificArtistIds)
       .order('name')
       .range(offset, offset + limit - 1)
-
-    // Appliquer les filtres des plateformes connectées
-
-    if (orConditions.length > 0) {
-      artistsQuery = artistsQuery.or(orConditions.join(','))
-    }
-
-    const { data: allArtists, error: artistsError } = await artistsQuery
 
     if (artistsError) {
       console.error('❌ Error fetching artists:', artistsError)
@@ -151,23 +203,13 @@ export async function GET(request: NextRequest) {
       }
     }) || []
 
-    // TODO: Calculer le total d'artistes spécifiques à cet utilisateur
-    // Pour l'instant, on utilise le total de la BDD mais il faudrait récupérer
-    // les artistes spécifiques à l'utilisateur depuis les APIs des plateformes
-    let totalCountQuery = supabaseAdmin
-      .from('artists')
-      .select('*', { count: 'exact', head: true })
-
-    if (orConditions.length > 0) {
-      totalCountQuery = totalCountQuery.or(orConditions.join(','))
-    }
-
-    const { count: totalPlatformArtists } = await totalCountQuery
-    const hasMore = (totalPlatformArtists || 0) > offset + limit
+    // Calculer les statistiques avec les artistes spécifiques à l'utilisateur
+    const totalUserArtists = userSpecificArtistIds.length
+    const hasMore = totalUserArtists > offset + limit
     const selectedCount = artists.filter(a => a.selected).length
 
     console.log(`✅ Fetched ${artists?.length || 0} artists for user ${user.id} (page ${page})`)
-    console.log(`📊 Total artistes utilisateur: ${totalPlatformArtists}, Sélectionnés: ${selectedCount}`)
+    console.log(`📊 Total artistes utilisateur: ${totalUserArtists}, Sélectionnés: ${selectedCount}`)
     
     return NextResponse.json({
       success: true,
@@ -176,11 +218,11 @@ export async function GET(request: NextRequest) {
         pagination: {
           page,
           limit,
-          total: totalPlatformArtists || 0,
+          total: totalUserArtists,
           hasMore
         },
         stats: {
-          total_artists: totalPlatformArtists || 0,
+          total_artists: totalUserArtists,
           selected_artists: selectedCount,
           displayed_artists: artists?.length || 0
         }
