@@ -135,17 +135,42 @@ export async function GET(request: NextRequest) {
           // Récupérer les artistes depuis l'API Spotify avec gestion du refresh
           console.log(`🔑 Récupération des artistes Spotify...`)
           
-          const [topArtists, followedArtists, recentTracks] = await Promise.all([
+          // Récupérer plus d'artistes avec différentes périodes
+          const [topArtistsShort, topArtistsMedium, topArtistsLong, followedArtists, recentTracks] = await Promise.all([
+            // Top artists court terme (4 semaines)
+            fetchSpotifyWithRefresh(
+              'https://api.spotify.com/v1/me/top/artists?time_range=short_term&limit=50',
+              connection.access_token,
+              connection.refresh_token,
+              user.id
+            ).then(data => data.items || []).catch(err => {
+              console.log(`❌ Erreur top artists short:`, err.message)
+              return []
+            }),
+            
+            // Top artists moyen terme (6 mois)
             fetchSpotifyWithRefresh(
               'https://api.spotify.com/v1/me/top/artists?time_range=medium_term&limit=50',
               connection.access_token,
               connection.refresh_token,
               user.id
             ).then(data => data.items || []).catch(err => {
-              console.log(`❌ Erreur top artists:`, err.message)
+              console.log(`❌ Erreur top artists medium:`, err.message)
               return []
             }),
             
+            // Top artists long terme (plusieurs années)
+            fetchSpotifyWithRefresh(
+              'https://api.spotify.com/v1/me/top/artists?time_range=long_term&limit=50',
+              connection.access_token,
+              connection.refresh_token,
+              user.id
+            ).then(data => data.items || []).catch(err => {
+              console.log(`❌ Erreur top artists long:`, err.message)
+              return []
+            }),
+            
+            // Artistes suivis
             fetchSpotifyWithRefresh(
               'https://api.spotify.com/v1/me/following?type=artist&limit=50',
               connection.access_token,
@@ -156,6 +181,7 @@ export async function GET(request: NextRequest) {
               return []
             }),
             
+            // Pistes récemment jouées
             fetchSpotifyWithRefresh(
               'https://api.spotify.com/v1/me/player/recently-played?limit=50',
               connection.access_token,
@@ -167,39 +193,64 @@ export async function GET(request: NextRequest) {
             })
           ])
 
+          // Combiner tous les top artists
+          const topArtists = [...topArtistsShort, ...topArtistsMedium, ...topArtistsLong]
+
+          // Logs détaillés pour chaque source
+          console.log(`📊 Résultats Spotify API:`)
+          console.log(`   🎯 Top artists short (4 semaines): ${Array.isArray(topArtistsShort) ? topArtistsShort.length : 0}`)
+          console.log(`   🎯 Top artists medium (6 mois): ${Array.isArray(topArtistsMedium) ? topArtistsMedium.length : 0}`)
+          console.log(`   🎯 Top artists long (années): ${Array.isArray(topArtistsLong) ? topArtistsLong.length : 0}`)
+          console.log(`   🎯 Total top artists: ${Array.isArray(topArtists) ? topArtists.length : 0}`)
+          console.log(`   👥 Followed artists: ${Array.isArray(followedArtists) ? followedArtists.length : 0}`)
+          console.log(`   🎧 Recent tracks: ${Array.isArray(recentTracks) ? recentTracks.length : 0}`)
+
           // Combiner tous les artistes et dédupliquer avec vérifications de sécurité
           const artistsMap = new Map()
           
           // Ajouter top artists (vérification de sécurité)
+          let topArtistsCount = 0
           if (Array.isArray(topArtists)) {
             topArtists.forEach(artist => {
               if (artist && artist.id) {
                 artistsMap.set(artist.id, artist)
+                topArtistsCount++
               }
             })
           }
           
           // Ajouter followed artists (vérification de sécurité)
+          let followedArtistsCount = 0
           if (Array.isArray(followedArtists)) {
             followedArtists.forEach(artist => {
               if (artist && artist.id) {
+                if (!artistsMap.has(artist.id)) {
+                  followedArtistsCount++
+                }
                 artistsMap.set(artist.id, artist)
               }
             })
           }
           
           // Ajouter artistes des pistes récentes (vérification de sécurité)
+          let recentArtistsCount = 0
           if (Array.isArray(recentTracks)) {
             recentTracks.forEach(track => {
               if (track && Array.isArray(track.artists)) {
                 track.artists.forEach(artist => {
                   if (artist && artist.id && !artistsMap.has(artist.id)) {
                     artistsMap.set(artist.id, artist)
+                    recentArtistsCount++
                   }
                 })
               }
             })
           }
+
+          console.log(`🔄 Artistes uniques ajoutés:`)
+          console.log(`   🎯 Depuis top artists: ${topArtistsCount}`)
+          console.log(`   👥 Depuis followed artists: ${followedArtistsCount}`)
+          console.log(`   🎧 Depuis recent tracks: ${recentArtistsCount}`)
 
           const allSpotifyArtists = Array.from(artistsMap.values())
           console.log(`🎵 ${allSpotifyArtists.length} artistes Spotify uniques trouvés`)
