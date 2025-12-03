@@ -643,13 +643,28 @@ export default function ApiDocsMobilePage() {
                       <div className="space-y-3">
                         {(endpoint.method === 'POST' || endpoint.method === 'PUT' || endpoint.method === 'PATCH') && (
                           <div>
-                            <label className="block text-sm font-medium mb-1">Corps de la requête (JSON)</label>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-sm font-medium">Corps de la requête (JSON)</label>
+                              {endpoint.requestBodyExample && (
+                                <button
+                                  onClick={() => {
+                                    const firstExample = Object.values(endpoint.requestBodyExample)[0] as any
+                                    if (firstExample?.value) {
+                                      setTestBody(JSON.stringify(firstExample.value, null, 2))
+                                    }
+                                  }}
+                                  className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                >
+                                  📋 Utiliser l'exemple
+                                </button>
+                              )}
+                            </div>
                             <textarea
                               value={testBody}
                               onChange={(e) => setTestBody(e.target.value)}
                               className="w-full px-3 py-2 border rounded-md font-mono text-sm"
-                              rows={4}
-                              placeholder='{"key": "value"}'
+                              rows={6}
+                              placeholder={endpoint.requestBodyExample ? 'Cliquez sur "Utiliser l\'exemple" pour pré-remplir' : '{"key": "value"}'}
                             />
                           </div>
                         )}
