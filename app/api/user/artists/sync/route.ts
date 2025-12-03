@@ -180,14 +180,15 @@ export async function POST(request: NextRequest) {
       // Calculer les nouveaux points et temps d'écoute basés sur les vraies données Spotify
       // IMPORTANT: Les points de fanitude sont basés UNIQUEMENT sur le temps d'écoute
       // pour être comparables entre tous les utilisateurs (1 point = 1 minute)
-      let newFanitudePoints = selectedArtist.fanitude_points
-      let newListeningMinutes = selectedArtist.last_listening_minutes
+      // À chaque sync, on REPART DE 0 pour avoir une vision actuelle de l'écoute
+      let newFanitudePoints = 0 // Remise à zéro à chaque sync
+      let newListeningMinutes = 0 // Remise à zéro à chaque sync
       
       if (spotifyConnection?.access_token) {
-        // Calculer les minutes d'écoute basées sur les vraies données Spotify
+        // Calculer les minutes d'écoute basées sur les vraies données Spotify récentes
         let minutesFromRecentTracks = 0
         
-        // Minutes basées sur les pistes récemment écoutées
+        // Minutes basées sur les pistes récemment écoutées (dernières 50 écoutes)
         const recentArtistTracks = spotifyRecentTracks.filter((track: any) => 
           track.track?.artists?.some((a: any) => a.id === artist.spotify_id)
         )
@@ -195,26 +196,27 @@ export async function POST(request: NextRequest) {
         if (recentArtistTracks.length > 0) {
           // Chaque écoute récente = ~3 minutes en moyenne
           minutesFromRecentTracks = recentArtistTracks.length * 3
-          console.log(`🎧 ${artist.name} écouté ${recentArtistTracks.length} fois récemment: +${minutesFromRecentTracks} minutes`)
+          console.log(`🎧 ${artist.name} écouté ${recentArtistTracks.length} fois récemment: ${minutesFromRecentTracks} minutes au total`)
         }
         
-        // Calculer les points de fanitude basés UNIQUEMENT sur le temps d'écoute
+        // Calculer les points de fanitude basés UNIQUEMENT sur le temps d'écoute récent
         // Formule : 1 point = 1 minute d'écoute (pour être comparable entre utilisateurs)
-        const pointsFromListening = minutesFromRecentTracks
+        newFanitudePoints = minutesFromRecentTracks
+        newListeningMinutes = minutesFromRecentTracks
         
-        if (pointsFromListening > 0) {
-          console.log(`📊 ${artist.name}: +${pointsFromListening} points de fanitude (basés sur ${minutesFromRecentTracks} minutes d'écoute)`)
+        if (newFanitudePoints > 0) {
+          console.log(`📊 ${artist.name}: ${newFanitudePoints} points de fanitude (= ${newListeningMinutes} minutes d'écoute récente)`)
+        } else {
+          console.log(`📊 ${artist.name}: Aucune écoute récente détectée`)
         }
-        
-        // Appliquer les gains (minimum 1 point et 1 minute pour éviter la stagnation)
-        newFanitudePoints += Math.max(pointsFromListening, 1)
-        newListeningMinutes += Math.max(minutesFromRecentTracks, 1)
         
       } else {
         // Fallback: simulation si pas de connexion Spotify
         console.log(`⚠️ Pas de connexion Spotify pour ${artist.name}, utilisation de valeurs simulées`)
-        newFanitudePoints += Math.floor(Math.random() * 20) + 5 // +5 à +25 points
-        newListeningMinutes += Math.floor(Math.random() * 15) + 2 // +2 à +17 minutes
+        const simulatedMinutes = Math.floor(Math.random() * 60) + 10 // 10 à 70 minutes
+        newFanitudePoints = simulatedMinutes
+        newListeningMinutes = simulatedMinutes
+        console.log(`📊 ${artist.name}: ${newFanitudePoints} points simulés (= ${newListeningMinutes} minutes simulées)`)
       }
 
       // Mettre à jour dans user_artists
@@ -242,8 +244,9 @@ export async function POST(request: NextRequest) {
         new_fanitude_points: newFanitudePoints,
         old_listening_minutes: selectedArtist.last_listening_minutes,
         new_listening_minutes: newListeningMinutes,
-        points_gained: newFanitudePoints - selectedArtist.fanitude_points,
-        minutes_gained: newListeningMinutes - selectedArtist.last_listening_minutes
+        points_change: newFanitudePoints - selectedArtist.fanitude_points,
+        minutes_change: newListeningMinutes - selectedArtist.last_listening_minutes,
+        sync_type: 'reset_to_current' // Indique qu'on repart de 0 à chaque sync
       })
     }
 
