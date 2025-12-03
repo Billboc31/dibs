@@ -508,6 +508,215 @@ const spec = {
       }
     },
 
+    // === PLATEFORMES ===
+    '/api/platforms': {
+      get: {
+        tags: ['Platforms'],
+        summary: '📱 Liste des plateformes disponibles',
+        'x-priority': 'P0',
+        responses: {
+          200: {
+            description: 'Liste des plateformes',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Plateformes disponibles',
+                    value: {
+                      success: true,
+                      data: [
+                        {
+                          id: '550e8400-e29b-41d4-a716-446655440001',
+                          name: 'Spotify',
+                          slug: 'spotify',
+                          color_hex: '#1DB954',
+                          logo_url: 'https://example.com/spotify-logo.png',
+                          is_available: true,
+                          description: 'Service de streaming musical',
+                          created_at: '2024-01-01T00:00:00Z'
+                        },
+                        {
+                          id: '550e8400-e29b-41d4-a716-446655440002',
+                          name: 'Apple Music',
+                          slug: 'apple_music',
+                          color_hex: '#FA243C',
+                          logo_url: 'https://example.com/apple-music-logo.png',
+                          is_available: false,
+                          description: 'Service de streaming d\'Apple',
+                          created_at: '2024-01-01T00:00:00Z'
+                        },
+                        {
+                          id: '550e8400-e29b-41d4-a716-446655440003',
+                          name: 'Deezer',
+                          slug: 'deezer',
+                          color_hex: '#FF6600',
+                          logo_url: 'https://example.com/deezer-logo.png',
+                          is_available: false,
+                          description: 'Service de streaming français',
+                          created_at: '2024-01-01T00:00:00Z'
+                        }
+                      ]
+                    }
+                  },
+                  error: {
+                    summary: 'Erreur serveur',
+                    value: {
+                      success: false,
+                      error: 'Erreur lors de la récupération des plateformes'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    '/api/user/platforms': {
+      get: {
+        tags: ['Platforms'],
+        summary: '🔗 Plateformes connectées de l\'utilisateur',
+        'x-priority': 'P0',
+        'x-auth': true,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Plateformes connectées',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Utilisateur avec plateformes connectées',
+                    value: {
+                      success: true,
+                      data: [
+                        {
+                          id: '550e8400-e29b-41d4-a716-446655440001',
+                          platform_id: '550e8400-e29b-41d4-a716-446655440001',
+                          user_id: '550e8400-e29b-41d4-a716-446655440000',
+                          connected_at: '2024-11-15T10:30:00Z',
+                          last_sync: '2024-11-30T15:45:00Z',
+                          platform: {
+                            id: '550e8400-e29b-41d4-a716-446655440001',
+                            name: 'Spotify',
+                            slug: 'spotify',
+                            color_hex: '#1DB954',
+                            logo_url: 'https://example.com/spotify-logo.png',
+                            is_available: true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  empty: {
+                    summary: 'Aucune plateforme connectée',
+                    value: {
+                      success: true,
+                      data: []
+                    }
+                  },
+                  error_auth: {
+                    summary: 'Token manquant',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Non autorisé',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Token invalide',
+                    value: {
+                      success: false,
+                      error: 'Invalid or expired token'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      delete: {
+        tags: ['Platforms'],
+        summary: '🗑️ Déconnecter une plateforme',
+        'x-priority': 'P1',
+        'x-auth': true,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          content: {
+            'application/json': {
+              examples: {
+                disconnect_spotify: {
+                  summary: 'Déconnecter Spotify',
+                  value: {
+                    platform_id: '550e8400-e29b-41d4-a716-446655440001'
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Plateforme déconnectée',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Déconnexion réussie',
+                    value: {
+                      success: true,
+                      message: 'Plateforme déconnectée avec succès',
+                      platform: 'Spotify'
+                    }
+                  },
+                  not_found: {
+                    summary: 'Plateforme non trouvée',
+                    value: {
+                      success: false,
+                      error: 'Cette plateforme n\'est pas connectée à votre compte'
+                    }
+                  },
+                  error_auth: {
+                    summary: 'Token manquant',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Non autorisé',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Token invalide',
+                    value: {
+                      success: false,
+                      error: 'Invalid or expired token'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
     '/api/payment/ws': {
       get: {
         tags: ['Wallet'],
