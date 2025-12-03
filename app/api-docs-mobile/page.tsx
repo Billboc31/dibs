@@ -22,6 +22,7 @@ export default function ApiDocsMobilePage() {
   const [testingEndpoint, setTestingEndpoint] = useState<string | null>(null)
   const [testToken, setTestToken] = useState('')
   const [testBody, setTestBody] = useState('{}')
+  const [queryParams, setQueryParams] = useState<Record<string, string>>({})
   const [testEmail, setTestEmail] = useState('')
   const [testResult, setTestResult] = useState<any>(null)
   const [testLoading, setTestLoading] = useState(false)
@@ -336,13 +337,26 @@ export default function ApiDocsMobilePage() {
     }
   }
 
-  const handleTestEndpoint = async (endpoint: Endpoint) => {
+  const handleTestEndpoint = async (endpoint: Endpoint, queryParams?: Record<string, string>) => {
     setTestLoading(true)
     setTestResult(null)
 
     try {
       const baseUrl = spec?.servers?.[0]?.url || ''
-      const url = `${baseUrl}${endpoint.path}`
+      let url = `${baseUrl}${endpoint.path}`
+      
+      // Ajouter les paramètres de query s'ils sont fournis
+      if (queryParams && Object.keys(queryParams).length > 0) {
+        const params = new URLSearchParams()
+        Object.entries(queryParams).forEach(([key, value]) => {
+          if (value && value.trim() !== '') {
+            params.append(key, value.trim())
+          }
+        })
+        if (params.toString()) {
+          url += `?${params.toString()}`
+        }
+      }
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
@@ -774,8 +788,47 @@ export default function ApiDocsMobilePage() {
                           </div>
                         )}
 
+                        {/* Paramètres de query pour /api/user/artists */}
+                        {endpoint.path === '/api/user/artists' && endpoint.method === 'GET' && (
+                          <div className="space-y-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                            <div className="font-medium text-blue-800">📄 Paramètres de pagination</div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Page (0, 1, 2...)
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={queryParams.page || '0'}
+                                  onChange={(e) => setQueryParams(prev => ({ ...prev, page: e.target.value }))}
+                                  className="w-full px-3 py-2 border rounded-md text-sm"
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Limite (1-50)
+                                </label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="50"
+                                  value={queryParams.limit || '10'}
+                                  onChange={(e) => setQueryParams(prev => ({ ...prev, limit: e.target.value }))}
+                                  className="w-full px-3 py-2 border rounded-md text-sm"
+                                  placeholder="10"
+                                />
+                              </div>
+                            </div>
+                            <div className="text-xs text-blue-600">
+                              💡 URL finale: <code>{spec?.servers?.[0]?.url || ''}{endpoint.path}?page={queryParams.page || '0'}&limit={queryParams.limit || '10'}</code>
+                            </div>
+                          </div>
+                        )}
+
                         <button
-                          onClick={() => handleTestEndpoint(endpoint)}
+                          onClick={() => handleTestEndpoint(endpoint, queryParams)}
                           disabled={testLoading}
                           className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
                         >
