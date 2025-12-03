@@ -178,21 +178,14 @@ export async function POST(request: NextRequest) {
       const artist = (selectedArtist as any).artists
       
       // Calculer les nouveaux points et temps d'écoute basés sur les vraies données Spotify
+      // IMPORTANT: Les points de fanitude sont basés UNIQUEMENT sur le temps d'écoute
+      // pour être comparables entre tous les utilisateurs (1 point = 1 minute)
       let newFanitudePoints = selectedArtist.fanitude_points
       let newListeningMinutes = selectedArtist.last_listening_minutes
       
       if (spotifyConnection?.access_token) {
-        // Calculer les points basés sur les vraies données Spotify
-        let pointsFromTopArtists = 0
+        // Calculer les minutes d'écoute basées sur les vraies données Spotify
         let minutesFromRecentTracks = 0
-        
-        // Points basés sur la position dans les top artists
-        const topArtistIndex = spotifyTopArtists.findIndex((ta: any) => ta.id === artist.spotify_id)
-        if (topArtistIndex !== -1) {
-          // Plus l'artiste est haut dans le classement, plus il gagne de points
-          pointsFromTopArtists = Math.max(50 - topArtistIndex, 10) // 50 points pour #1, 49 pour #2, etc., minimum 10
-          console.log(`🎯 ${artist.name} trouvé en position ${topArtistIndex + 1} des top artists: +${pointsFromTopArtists} points`)
-        }
         
         // Minutes basées sur les pistes récemment écoutées
         const recentArtistTracks = spotifyRecentTracks.filter((track: any) => 
@@ -205,8 +198,16 @@ export async function POST(request: NextRequest) {
           console.log(`🎧 ${artist.name} écouté ${recentArtistTracks.length} fois récemment: +${minutesFromRecentTracks} minutes`)
         }
         
+        // Calculer les points de fanitude basés UNIQUEMENT sur le temps d'écoute
+        // Formule : 1 point = 1 minute d'écoute (pour être comparable entre utilisateurs)
+        const pointsFromListening = minutesFromRecentTracks
+        
+        if (pointsFromListening > 0) {
+          console.log(`📊 ${artist.name}: +${pointsFromListening} points de fanitude (basés sur ${minutesFromRecentTracks} minutes d'écoute)`)
+        }
+        
         // Appliquer les gains (minimum 1 point et 1 minute pour éviter la stagnation)
-        newFanitudePoints += Math.max(pointsFromTopArtists, 1)
+        newFanitudePoints += Math.max(pointsFromListening, 1)
         newListeningMinutes += Math.max(minutesFromRecentTracks, 1)
         
       } else {
