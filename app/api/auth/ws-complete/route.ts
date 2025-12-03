@@ -111,15 +111,18 @@ export async function GET(request: NextRequest) {
           })
 
           // URL de redirection vers notre callback spécial
-          // Utiliser l'URL de callback par défaut de Supabase (pas de emailRedirectTo)
-          // Cela garantit que Supabase ajoute les bons paramètres d'authentification
+          // URL de callback vers notre page callback-ws (qui fonctionnait avant)
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://dibs-poc0.vercel.app'
+          const redirectTo = `${baseUrl}/auth/callback-ws?email=${encodeURIComponent(email)}`
           
-          // Envoyer le Magic Link SANS redirection personnalisée
+          console.log('📧 Envoi Magic Link avec redirectTo:', redirectTo)
+          
+          // Envoyer le Magic Link avec notre URL de callback
           const { data, error } = await supabase.auth.signInWithOtp({
             email: email,
             options: {
               shouldCreateUser: true,
-              // Pas de emailRedirectTo - utilise l'URL par défaut configurée dans Supabase
+              emailRedirectTo: redirectTo,
             }
           })
 
@@ -157,18 +160,21 @@ export async function GET(request: NextRequest) {
             timestamp: new Date().toISOString()
           })
 
-          // Écouter les changements d'authentification Supabase
+          // Double approche : callback personnalisé ET écoute onAuthStateChange
+          // Cela garantit que ça marche dans tous les cas
+          
+          // 1. Écouter les changements d'authentification Supabase (backup)
           const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
             console.log('🔔 Auth state change:', event, session?.user?.email)
             
             if (event === 'SIGNED_IN' && session && session.user?.email === email) {
-              console.log('✅ Utilisateur authentifié via Magic Link:', session.user.email)
+              console.log('✅ Utilisateur authentifié via onAuthStateChange:', session.user.email)
               
               if (!isClosed) {
                 send({
                   step: 5,
                   status: 'authenticated',
-                  message: 'Authentification réussie !',
+                  message: 'Authentification réussie ! (via onAuthStateChange)',
                   session: {
                     access_token: session.access_token,
                     refresh_token: session.refresh_token,
@@ -184,7 +190,7 @@ export async function GET(request: NextRequest) {
 
                 // Fermer le WebSocket après succès
                 setTimeout(() => {
-                  closeWebSocket('Authentification réussie')
+                  closeWebSocketWithCleanup('Authentification réussie via onAuthStateChange')
                 }, 2000)
               }
 
@@ -192,6 +198,8 @@ export async function GET(request: NextRequest) {
               authListener?.subscription?.unsubscribe()
             }
           })
+          
+          // 2. Le callback /auth/callback-ws enverra aussi le token via /notify (méthode principale)
 
           // Modifier la fonction de fermeture pour nettoyer le listener
           const originalCloseWebSocket = closeWebSocket
