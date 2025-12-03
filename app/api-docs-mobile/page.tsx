@@ -917,7 +917,5 @@ export default function ApiDocsMobilePage() {
         )}
       </div>
     </div>
-      </div>
-    </div>
   )
 }
