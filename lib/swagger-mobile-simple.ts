@@ -413,27 +413,13 @@ const spec = {
         'x-priority': 'P0',
         'x-auth': true,
         security: [{ BearerAuth: [] }],
-        description: 'Sélectionne ou désélectionne un ou plusieurs artistes. Déclenche automatiquement un sync pour recalculer les scores de fanitude des nouveaux artistes sélectionnés.',
+        description: 'Sélectionne ou désélectionne un ou plusieurs artistes. **RECOMMANDÉ**: Utilisez le format avec liste d\'artistes pour de meilleures performances. Déclenche automatiquement un sync pour recalculer les scores de fanitude des nouveaux artistes sélectionnés.',
         requestBody: {
           content: {
             'application/json': {
               examples: {
-                single_select: {
-                  summary: 'Sélectionner un artiste (format simple)',
-                  value: {
-                    artistId: '550e8400-e29b-41d4-a716-446655440010',
-                    selected: true
-                  }
-                },
-                single_deselect: {
-                  summary: 'Désélectionner un artiste (format simple)',
-                  value: {
-                    artistId: '550e8400-e29b-41d4-a716-446655440010',
-                    selected: false
-                  }
-                },
                 multiple_toggle: {
-                  summary: 'Toggle plusieurs artistes (format multiple)',
+                  summary: '🎯 RECOMMANDÉ: Toggle plusieurs artistes en une fois',
                   value: {
                     artists: [
                       {
@@ -447,8 +433,30 @@ const spec = {
                       {
                         artistId: '550e8400-e29b-41d4-a716-446655440012',
                         selected: true
+                      },
+                      {
+                        artistId: '550e8400-e29b-41d4-a716-446655440013',
+                        selected: true
+                      },
+                      {
+                        artistId: '550e8400-e29b-41d4-a716-446655440014',
+                        selected: false
                       }
                     ]
+                  }
+                },
+                single_select: {
+                  summary: 'Format simple: Sélectionner un seul artiste',
+                  value: {
+                    artistId: '550e8400-e29b-41d4-a716-446655440010',
+                    selected: true
+                  }
+                },
+                single_deselect: {
+                  summary: 'Format simple: Désélectionner un seul artiste',
+                  value: {
+                    artistId: '550e8400-e29b-41d4-a716-446655440010',
+                    selected: false
                   }
                 }
               }
@@ -460,58 +468,70 @@ const spec = {
             description: 'Sélections mises à jour',
             content: {
               'application/json': {
-                examples: {
-                  single_success: {
-                    summary: 'Succès format simple',
-                    value: {
-                      success: true,
-                      data: {
-                        results: [
-                          {
-                            artistId: '550e8400-e29b-41d4-a716-446655440010',
-                            success: true,
-                            selected: true,
-                            name: 'Taylor Swift'
-                          }
-                        ],
-                        total_processed: 1,
-                        total_selected: 5,
-                        sync_triggered: true
-                      }
+              examples: {
+                multiple_success: {
+                  summary: '🎯 EXEMPLE PRINCIPAL: Réponse format multiple (5 artistes)',
+                  value: {
+                    success: true,
+                    data: {
+                      results: [
+                        {
+                          artistId: '550e8400-e29b-41d4-a716-446655440010',
+                          success: true,
+                          selected: true,
+                          name: 'Taylor Swift'
+                        },
+                        {
+                          artistId: '550e8400-e29b-41d4-a716-446655440011',
+                          success: true,
+                          selected: false,
+                          name: 'Ed Sheeran'
+                        },
+                        {
+                          artistId: '550e8400-e29b-41d4-a716-446655440012',
+                          success: true,
+                          selected: true,
+                          name: 'Adele'
+                        },
+                        {
+                          artistId: '550e8400-e29b-41d4-a716-446655440013',
+                          success: true,
+                          selected: true,
+                          name: 'The Weeknd'
+                        },
+                        {
+                          artistId: '550e8400-e29b-41d4-a716-446655440014',
+                          success: true,
+                          selected: false,
+                          name: 'Billie Eilish'
+                        }
+                      ],
+                      total_processed: 5,
+                      total_selected: 12,
+                      sync_triggered: true
                     }
-                  },
-                  multiple_success: {
-                    summary: 'Succès format multiple',
-                    value: {
-                      success: true,
-                      data: {
-                        results: [
-                          {
-                            artistId: '550e8400-e29b-41d4-a716-446655440010',
-                            success: true,
-                            selected: true,
-                            name: 'Taylor Swift'
-                          },
-                          {
-                            artistId: '550e8400-e29b-41d4-a716-446655440011',
-                            success: true,
-                            selected: false,
-                            name: 'Ed Sheeran'
-                          },
-                          {
-                            artistId: '550e8400-e29b-41d4-a716-446655440012',
-                            success: true,
-                            selected: true,
-                            name: 'Adele'
-                          }
-                        ],
-                        total_processed: 3,
-                        total_selected: 7,
-                        sync_triggered: true
-                      }
+                  }
+                },
+                single_success: {
+                  summary: 'Réponse format simple (1 artiste)',
+                  value: {
+                    success: true,
+                    data: {
+                      results: [
+                        {
+                          artistId: '550e8400-e29b-41d4-a716-446655440010',
+                          success: true,
+                          selected: true,
+                          name: 'Taylor Swift'
+                        }
+                      ],
+                      total_processed: 1,
+                      total_selected: 8,
+                      sync_triggered: true
                     }
                   }
                 }
+              }
               }
             }
           },
