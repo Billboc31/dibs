@@ -73,12 +73,35 @@ const spec = {
                           display_name: 'John Doe'
                         },
                         session: {
-                          access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                          refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                          access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzMzMDg2Mzk5LCJpYXQiOjE3MzMwODI3OTksImlzcyI6Imh0dHBzOi8vdWlrc2JoZ29qZ3Z5dGFwZWxidXEuc3VwYWJhc2UuY28vYXV0aC92MSIsInN1YiI6IjU1MGU4NDAwLWUyOWItNDFkNC1hNzE2LTQ0NjY1NTQ0MDAwMCIsImVtYWlsIjoidXNlckBleGFtcGxlLmNvbSJ9.example_signature',
+                          refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzMzNjg3NTk5LCJpYXQiOjE3MzMwODI3OTksInN1YiI6IjU1MGU4NDAwLWUyOWItNDFkNC1hNzE2LTQ0NjY1NTQ0MDAwMCJ9.refresh_signature',
                           expires_in: 3600,
                           token_type: 'bearer'
                         }
                       }
+                    }
+                  },
+                  error: {
+                    summary: 'Erreur - Identifiants invalides',
+                    value: {
+                      success: false,
+                      error: 'Invalid login credentials'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: {
+            description: 'Erreur de validation',
+            content: {
+              'application/json': {
+                examples: {
+                  missing_fields: {
+                    summary: 'Champs manquants',
+                    value: {
+                      success: false,
+                      error: 'Email and password are required'
                     }
                   }
                 }
@@ -124,9 +147,42 @@ const spec = {
                         user: {
                           id: '550e8400-e29b-41d4-a716-446655440001',
                           email: 'newuser@example.com',
-                          display_name: 'Jane Doe'
-                        }
+                          display_name: 'Jane Doe',
+                          email_confirmed_at: null,
+                          created_at: '2024-12-03T10:30:00Z'
+                        },
+                        message: 'Inscription réussie ! Vérifiez votre email pour confirmer votre compte.'
                       }
+                    }
+                  },
+                  error_email_exists: {
+                    summary: 'Email déjà utilisé',
+                    value: {
+                      success: false,
+                      error: 'User already registered'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: {
+            description: 'Erreur de validation',
+            content: {
+              'application/json': {
+                examples: {
+                  weak_password: {
+                    summary: 'Mot de passe trop faible',
+                    value: {
+                      success: false,
+                      error: 'Password should be at least 6 characters'
+                    }
+                  },
+                  invalid_email: {
+                    summary: 'Email invalide',
+                    value: {
+                      success: false,
+                      error: 'Invalid email format'
                     }
                   }
                 }
@@ -230,8 +286,27 @@ const spec = {
                         avatar_url: 'https://example.com/avatar.jpg',
                         city: 'Paris',
                         country: 'France',
-                        created_at: '2024-01-15T10:30:00Z'
+                        location_lat: 48.8566,
+                        location_lng: 2.3522,
+                        created_at: '2024-01-15T10:30:00Z',
+                        updated_at: '2024-12-03T10:30:00Z'
                       }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Non authentifié',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Token manquant ou invalide',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
                     }
                   }
                 }

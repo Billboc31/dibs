@@ -558,11 +558,19 @@ export default function ApiDocsMobilePage() {
             <div key={`${endpoint.method}-${endpoint.path}`} className="bg-white rounded-lg shadow-sm border">
               <div 
                 className="p-4 cursor-pointer hover:bg-gray-50"
-                onClick={() => setExpandedEndpoint(
-                  expandedEndpoint === `${endpoint.method}-${endpoint.path}` 
-                    ? null 
-                    : `${endpoint.method}-${endpoint.path}`
-                )}
+                onClick={() => {
+                  const key = `${endpoint.method}-${endpoint.path}`
+                  const isExpanding = expandedEndpoint !== key
+                  setExpandedEndpoint(isExpanding ? key : null)
+                  
+                  // Pré-remplir automatiquement le corps avec le premier exemple
+                  if (isExpanding && endpoint.requestBodyExample && (endpoint.method === 'POST' || endpoint.method === 'PUT' || endpoint.method === 'PATCH')) {
+                    const firstExample = Object.values(endpoint.requestBodyExample)[0] as any
+                    if (firstExample?.value) {
+                      setTestBody(JSON.stringify(firstExample.value, null, 2))
+                    }
+                  }
+                }}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -615,6 +623,32 @@ export default function ApiDocsMobilePage() {
                           <div key={key} className="border rounded p-3">
                             <div className="font-medium text-sm mb-1">{example.summary}</div>
                             <pre className="bg-gray-100 p-2 rounded text-sm overflow-x-auto">
+                              {JSON.stringify(example.value, null, 2)}
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Exemples de réponse */}
+                  {endpoint.responseExample && (
+                    <div className="mb-4">
+                      <h4 className="font-medium mb-2">📥 Exemples de réponse</h4>
+                      <div className="space-y-2">
+                        {Object.entries(endpoint.responseExample).map(([key, example]: [string, any]) => (
+                          <div key={key} className="border rounded p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-sm">{example.summary}</span>
+                              <span className={`px-2 py-1 text-xs rounded ${
+                                key.includes('success') || key.includes('200') ? 'bg-green-100 text-green-800' : 
+                                key.includes('error') || key.includes('400') || key.includes('401') ? 'bg-red-100 text-red-800' : 
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {key.includes('200') ? '200' : key.includes('400') ? '400' : key.includes('401') ? '401' : 'Response'}
+                              </span>
+                            </div>
+                            <pre className="bg-gray-50 p-2 rounded text-sm overflow-x-auto">
                               {JSON.stringify(example.value, null, 2)}
                             </pre>
                           </div>
