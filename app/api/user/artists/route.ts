@@ -78,32 +78,89 @@ export async function GET(request: NextRequest) {
         if (!connection?.access_token) {
           console.log('⚠️ Pas de token Spotify pour cet utilisateur')
         } else {
-          // Récupérer les artistes depuis l'API Spotify
+          // Récupérer les artistes depuis l'API Spotify avec gestion d'erreurs
+          console.log(`🔑 Utilisation du token Spotify: ${connection.access_token.substring(0, 20)}...`)
+          
           const [topArtists, followedArtists, recentTracks] = await Promise.all([
             fetch(`https://api.spotify.com/v1/me/top/artists?time_range=medium_term&limit=50`, {
               headers: { 'Authorization': `Bearer ${connection.access_token}` }
-            }).then(res => res.json()).then(data => data.items || []).catch(() => []),
+            }).then(async res => {
+              if (!res.ok) {
+                console.log(`⚠️ Erreur top artists: ${res.status} ${res.statusText}`)
+                return []
+              }
+              const data = await res.json()
+              console.log(`✅ Top artists: ${data.items?.length || 0} trouvés`)
+              return Array.isArray(data.items) ? data.items : []
+            }).catch(err => {
+              console.log(`❌ Erreur top artists:`, err.message)
+              return []
+            }),
             
             fetch(`https://api.spotify.com/v1/me/following?type=artist&limit=50`, {
               headers: { 'Authorization': `Bearer ${connection.access_token}` }
-            }).then(res => res.json()).then(data => data.artists?.items || []).catch(() => []),
+            }).then(async res => {
+              if (!res.ok) {
+                console.log(`⚠️ Erreur followed artists: ${res.status} ${res.statusText}`)
+                return []
+              }
+              const data = await res.json()
+              console.log(`✅ Followed artists: ${data.artists?.items?.length || 0} trouvés`)
+              return Array.isArray(data.artists?.items) ? data.artists.items : []
+            }).catch(err => {
+              console.log(`❌ Erreur followed artists:`, err.message)
+              return []
+            }),
             
             fetch(`https://api.spotify.com/v1/me/player/recently-played?limit=50`, {
               headers: { 'Authorization': `Bearer ${connection.access_token}` }
-            }).then(res => res.json()).then(data => data.items || []).catch(() => [])
+            }).then(async res => {
+              if (!res.ok) {
+                console.log(`⚠️ Erreur recent tracks: ${res.status} ${res.statusText}`)
+                return []
+              }
+              const data = await res.json()
+              console.log(`✅ Recent tracks: ${data.items?.length || 0} trouvés`)
+              return Array.isArray(data.items) ? data.items : []
+            }).catch(err => {
+              console.log(`❌ Erreur recent tracks:`, err.message)
+              return []
+            })
           ])
 
-          // Combiner tous les artistes et dédupliquer
+          // Combiner tous les artistes et dédupliquer avec vérifications de sécurité
           const artistsMap = new Map()
-          topArtists.forEach(artist => artistsMap.set(artist.id, artist))
-          followedArtists.forEach(artist => artistsMap.set(artist.id, artist))
-          recentTracks.forEach(track => {
-            track.artists.forEach(artist => {
-              if (!artistsMap.has(artist.id)) {
+          
+          // Ajouter top artists (vérification de sécurité)
+          if (Array.isArray(topArtists)) {
+            topArtists.forEach(artist => {
+              if (artist && artist.id) {
                 artistsMap.set(artist.id, artist)
               }
             })
-          })
+          }
+          
+          // Ajouter followed artists (vérification de sécurité)
+          if (Array.isArray(followedArtists)) {
+            followedArtists.forEach(artist => {
+              if (artist && artist.id) {
+                artistsMap.set(artist.id, artist)
+              }
+            })
+          }
+          
+          // Ajouter artistes des pistes récentes (vérification de sécurité)
+          if (Array.isArray(recentTracks)) {
+            recentTracks.forEach(track => {
+              if (track && Array.isArray(track.artists)) {
+                track.artists.forEach(artist => {
+                  if (artist && artist.id && !artistsMap.has(artist.id)) {
+                    artistsMap.set(artist.id, artist)
+                  }
+                })
+              }
+            })
+          }
 
           const allSpotifyArtists = Array.from(artistsMap.values())
           console.log(`🎵 ${allSpotifyArtists.length} artistes Spotify uniques trouvés`)
@@ -133,24 +190,63 @@ export async function GET(request: NextRequest) {
 
     console.log(`📊 Total artistes spécifiques à l'utilisateur: ${userSpecificArtistIds.length}`)
 
+    // Si aucun artiste spécifique trouvé, utiliser un fallback avec des artistes de la base globale
     if (userSpecificArtistIds.length === 0) {
-      console.log('⚠️ Aucun artiste trouvé pour cet utilisateur')
+      console.log('⚠️ Aucun artiste spécifique trouvé, utilisation du fallback avec artistes globaux')
+      
+      // Fallback: récupérer quelques artistes Spotify de la base globale
+      const { data: fallbackArtists } = await supabaseAdmin
+        .from('artists')
+        .select('id, name, spotify_id, apple_music_id, deezer_id, image_url')
+        .not('spotify_id', 'is', null)
+        .order('name')
+        .range(offset, offset + limit - 1)
+
+      const { count: fallbackTotal } = await supabaseAdmin
+        .from('artists')
+        .select('*', { count: 'exact', head: true })
+        .not('spotify_id', 'is', null)
+
+      // Récupérer les artistes sélectionnés par l'utilisateur
+      const { data: selectedArtists } = await supabaseAdmin
+        .from('user_artists')
+        .select('artist_id')
+        .eq('user_id', user.id)
+
+      const selectedArtistsSet = new Set(selectedArtists?.map(ua => ua.artist_id) || [])
+
+      const artists = fallbackArtists?.map(artist => ({
+        id: artist.id,
+        name: artist.name,
+        spotify_id: artist.spotify_id,
+        apple_music_id: artist.apple_music_id,
+        deezer_id: artist.deezer_id,
+        image_url: artist.image_url,
+        selected: selectedArtistsSet.has(artist.id)
+      })) || []
+
+      const selectedCount = artists.filter(a => a.selected).length
+      const hasMore = (fallbackTotal || 0) > offset + limit
+
+      console.log(`🔄 Fallback: ${artists.length} artistes affichés, ${fallbackTotal} total, ${selectedCount} sélectionnés`)
+
       return NextResponse.json({
         success: true,
         data: {
-          artists: [],
+          artists,
           pagination: {
             page,
             limit,
-            total: 0,
-            hasMore: false
+            total: fallbackTotal || 0,
+            hasMore
           },
           stats: {
-            total_artists: 0,
-            selected_artists: 0,
-            displayed_artists: 0
+            total_artists: fallbackTotal || 0,
+            selected_artists: selectedCount,
+            displayed_artists: artists.length
           }
-        }
+        },
+        message: "Utilisation des artistes de la base globale car l'API Spotify n'est pas accessible (mode développement)"
       })
     }
 
