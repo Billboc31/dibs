@@ -132,31 +132,63 @@ export async function GET(request: NextRequest) {
           const allSpotifyArtists = Array.from(artistsMap.values())
           console.log(`🎵 ${allSpotifyArtists.length} artistes Spotify uniques trouvés`)
 
-          // Upsert les artistes dans notre base puis récupérer leurs IDs
+          // D'abord, essayons la méthode simple : chercher les artistes existants
           if (allSpotifyArtists.length > 0) {
-            console.log(`🔄 Synchronisation de ${allSpotifyArtists.length} artistes dans la base...`)
+            const spotifyIds = allSpotifyArtists.map((a: any) => a.id)
+            console.log(`🔍 Recherche de ${spotifyIds.length} artistes Spotify dans la base...`)
+            console.log(`🎵 Premiers IDs Spotify: ${spotifyIds.slice(0, 3).join(', ')}...`)
             
-            // Préparer les données pour l'upsert
-            const artistsToUpsert = allSpotifyArtists.map((artist: any) => ({
-              spotify_id: artist.id,
-              name: artist.name,
-              image_url: artist.images?.[0]?.url || null
-            }))
-
-            // Upsert les artistes (insert ou update si existe déjà)
-            const { data: upsertedArtists, error: upsertError } = await supabaseAdmin
+            // Vérifier d'abord combien d'artistes existent dans la base
+            const { count: totalArtistsInDB } = await supabaseAdmin
               .from('artists')
-              .upsert(artistsToUpsert, { 
-                onConflict: 'spotify_id',
-                ignoreDuplicates: false 
-              })
+              .select('*', { count: 'exact', head: true })
+              .not('spotify_id', 'is', null)
+            
+            console.log(`📊 Total artistes avec spotify_id dans la base: ${totalArtistsInDB}`)
+            
+            // Chercher les artistes existants
+            const { data: existingArtists, error: searchError } = await supabaseAdmin
+              .from('artists')
               .select('id, spotify_id, name')
+              .in('spotify_id', spotifyIds)
 
-            if (upsertError) {
-              console.error('❌ Erreur upsert artistes:', upsertError)
-            } else if (upsertedArtists) {
-              userSpecificArtistIds.push(...upsertedArtists.map(a => a.id))
-              console.log(`✅ ${upsertedArtists.length} artistes synchronisés et récupérés`)
+            if (searchError) {
+              console.error('❌ Erreur recherche artistes:', searchError)
+            } else {
+              console.log(`🔍 Artistes trouvés dans la base: ${existingArtists?.length || 0}`)
+              if (existingArtists && existingArtists.length > 0) {
+                console.log(`🎯 Premiers artistes trouvés: ${existingArtists.slice(0, 3).map(a => `${a.name} (${a.spotify_id})`).join(', ')}`)
+                userSpecificArtistIds.push(...existingArtists.map(a => a.id))
+              }
+              
+              // Si on n'a pas trouvé tous les artistes, upsert les manquants
+              const foundSpotifyIds = new Set(existingArtists?.map(a => a.spotify_id) || [])
+              const missingArtists = allSpotifyArtists.filter((artist: any) => !foundSpotifyIds.has(artist.id))
+              
+              if (missingArtists.length > 0) {
+                console.log(`🔄 ${missingArtists.length} artistes manquants, ajout en cours...`)
+                
+                const artistsToUpsert = missingArtists.map((artist: any) => ({
+                  spotify_id: artist.id,
+                  name: artist.name,
+                  image_url: artist.images?.[0]?.url || null
+                }))
+
+                const { data: newArtists, error: upsertError } = await supabaseAdmin
+                  .from('artists')
+                  .upsert(artistsToUpsert, { 
+                    onConflict: 'spotify_id',
+                    ignoreDuplicates: false 
+                  })
+                  .select('id, spotify_id, name')
+
+                if (upsertError) {
+                  console.error('❌ Erreur upsert nouveaux artistes:', upsertError)
+                } else if (newArtists) {
+                  userSpecificArtistIds.push(...newArtists.map(a => a.id))
+                  console.log(`✅ ${newArtists.length} nouveaux artistes ajoutés`)
+                }
+              }
             }
           }
         }
