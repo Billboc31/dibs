@@ -421,70 +421,53 @@ export default function ApiDocsMobilePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Menu latéral */}
-      <div className="w-64 bg-white border-r border-gray-200 fixed h-full overflow-y-auto">
+      {/* Menu latéral fixe */}
+      <div className="w-64 bg-white border-r border-gray-200 fixed h-full overflow-y-auto z-20">
         <div className="p-4">
           <h2 className="text-lg font-bold text-gray-900 mb-4">📱 Navigation</h2>
           
-          {/* Sections du menu */}
-          <div className="space-y-2">
-            <a href="#authentication" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
-              🔐 Authentification
-            </a>
-            <a href="#user-management" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
-              👤 Gestion utilisateur
-            </a>
-            <a href="#artists" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
-              🎵 Artistes
-            </a>
-            <a href="#events" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
-              🎫 Événements
-            </a>
-            <a href="#wallet-payment" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
-              💳 Wallet & Paiement
-            </a>
-            <a href="#platforms" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
-              🎧 Plateformes
-            </a>
-            <a href="#qr-codes" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
-              📱 QR Codes
-            </a>
+          {/* Navigation par sections */}
+          <div className="space-y-1 mb-6">
+            <a href="#auth" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">🔐 Authentification</a>
+            <a href="#user" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">👤 Utilisateur</a>
+            <a href="#artists" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">🎵 Artistes</a>
+            <a href="#events" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">🎫 Événements</a>
+            <a href="#wallet" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">💳 Wallet</a>
+            <a href="#platforms" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">🎧 Plateformes</a>
+            <a href="#qr" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">📱 QR Codes</a>
           </div>
 
-          {/* Tags filter dans le menu */}
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">🏷️ Filtrer par tag</h3>
+          {/* Filtres dans le menu */}
+          <div className="border-t pt-4">
+            <h3 className="text-sm font-medium text-gray-900 mb-2">🏷️ Filtres</h3>
             <select
               value={selectedTag}
               onChange={(e) => setSelectedTag(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md text-sm"
+              className="w-full px-2 py-1 border rounded text-sm mb-3"
             >
-              <option value="all">Tous les endpoints</option>
+              <option value="all">Tous les tags</option>
               {tags.map(tag => (
                 <option key={tag} value={tag}>{tag}</option>
               ))}
             </select>
-          </div>
-
-          {/* Search dans le menu */}
-          <div className="mt-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">🔍 Recherche</h3>
+            
             <input
               type="text"
-              placeholder="Rechercher un endpoint..."
+              placeholder="Rechercher..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md text-sm"
+              className="w-full px-2 py-1 border rounded text-sm"
             />
           </div>
         </div>
       </div>
 
-      {/* Contenu principal */}
+      {/* Contenu principal avec marge pour le menu */}
       <div className="flex-1 ml-64">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-          <div className="max-w-5xl mx-auto px-4 py-4">
+        <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">📱 API Mobile DIBS</h1>
@@ -544,9 +527,27 @@ export default function ApiDocsMobilePage() {
             </div>
           </div>
 
-          {/* Info rapide */}
-          <div className="text-sm text-gray-600">
-            {filteredEndpoints.length} endpoint(s) • Utilisez le menu latéral pour naviguer
+          {/* Filtres */}
+          <div className="flex gap-4 items-center">
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="🔍 Rechercher un endpoint..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <select
+              value={selectedTag}
+              onChange={(e) => setSelectedTag(e.target.value)}
+              className="px-4 py-2 border rounded-lg"
+            >
+              <option value="all">Tous les tags</option>
+              {tags.map(tag => (
+                <option key={tag} value={tag}>{tag}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -915,6 +916,8 @@ export default function ApiDocsMobilePage() {
             <div className="text-gray-400 text-sm mt-2">Essayez de modifier vos filtres</div>
           </div>
         )}
+      </div>
+        </div>
       </div>
     </div>
   )
