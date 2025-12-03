@@ -409,25 +409,46 @@ const spec = {
     '/api/user/artists/toggle': {
       post: {
         tags: ['Artists'],
-        summary: '⭐ Sélectionner/Désélectionner artiste',
+        summary: '⭐ Sélectionner/Désélectionner artiste(s)',
         'x-priority': 'P0',
+        'x-auth': true,
         security: [{ BearerAuth: [] }],
+        description: 'Sélectionne ou désélectionne un ou plusieurs artistes. Déclenche automatiquement un sync pour recalculer les scores de fanitude des nouveaux artistes sélectionnés.',
         requestBody: {
           content: {
             'application/json': {
               examples: {
-                select: {
-                  summary: 'Sélectionner un artiste',
+                single_select: {
+                  summary: 'Sélectionner un artiste (format simple)',
                   value: {
                     artistId: '550e8400-e29b-41d4-a716-446655440010',
                     selected: true
                   }
                 },
-                deselect: {
-                  summary: 'Désélectionner un artiste',
+                single_deselect: {
+                  summary: 'Désélectionner un artiste (format simple)',
                   value: {
                     artistId: '550e8400-e29b-41d4-a716-446655440010',
                     selected: false
+                  }
+                },
+                multiple_toggle: {
+                  summary: 'Toggle plusieurs artistes (format multiple)',
+                  value: {
+                    artists: [
+                      {
+                        artistId: '550e8400-e29b-41d4-a716-446655440010',
+                        selected: true
+                      },
+                      {
+                        artistId: '550e8400-e29b-41d4-a716-446655440011',
+                        selected: false
+                      },
+                      {
+                        artistId: '550e8400-e29b-41d4-a716-446655440012',
+                        selected: true
+                      }
+                    ]
                   }
                 }
               }
@@ -436,19 +457,163 @@ const spec = {
         },
         responses: {
           200: {
-            description: 'Sélection mise à jour',
+            description: 'Sélections mises à jour',
+            content: {
+              'application/json': {
+                examples: {
+                  single_success: {
+                    summary: 'Succès format simple',
+                    value: {
+                      success: true,
+                      data: {
+                        results: [
+                          {
+                            artistId: '550e8400-e29b-41d4-a716-446655440010',
+                            success: true,
+                            selected: true,
+                            name: 'Taylor Swift'
+                          }
+                        ],
+                        total_processed: 1,
+                        total_selected: 5,
+                        sync_triggered: true
+                      }
+                    }
+                  },
+                  multiple_success: {
+                    summary: 'Succès format multiple',
+                    value: {
+                      success: true,
+                      data: {
+                        results: [
+                          {
+                            artistId: '550e8400-e29b-41d4-a716-446655440010',
+                            success: true,
+                            selected: true,
+                            name: 'Taylor Swift'
+                          },
+                          {
+                            artistId: '550e8400-e29b-41d4-a716-446655440011',
+                            success: true,
+                            selected: false,
+                            name: 'Ed Sheeran'
+                          },
+                          {
+                            artistId: '550e8400-e29b-41d4-a716-446655440012',
+                            success: true,
+                            selected: true,
+                            name: 'Adele'
+                          }
+                        ],
+                        total_processed: 3,
+                        total_selected: 7,
+                        sync_triggered: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: {
+            description: 'Paramètres manquants',
+            content: {
+              'application/json': {
+                examples: {
+                  missing_params: {
+                    summary: 'Paramètres manquants',
+                    value: {
+                      success: false,
+                      error: 'artistId or artists array is required'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    '/api/user/artists/sync': {
+      post: {
+        tags: ['Artists'],
+        summary: '🔄 Synchroniser les scores de fanitude',
+        'x-priority': 'P1',
+        'x-auth': true,
+        security: [{ BearerAuth: [] }],
+        description: 'Recalcule les scores de fanitude et minutes d\'écoute pour les artistes sélectionnés. Peut synchroniser tous les artistes ou seulement une liste spécifique.',
+        requestBody: {
+          content: {
+            'application/json': {
+              examples: {
+                sync_all: {
+                  summary: 'Synchroniser tous les artistes sélectionnés',
+                  value: {}
+                },
+                sync_specific: {
+                  summary: 'Synchroniser des artistes spécifiques',
+                  value: {
+                    artistIds: [
+                      '550e8400-e29b-41d4-a716-446655440010',
+                      '550e8400-e29b-41d4-a716-446655440011',
+                      '550e8400-e29b-41d4-a716-446655440012'
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Synchronisation terminée',
             content: {
               'application/json': {
                 examples: {
                   success: {
-                    summary: 'Succès',
+                    summary: 'Synchronisation réussie',
                     value: {
                       success: true,
                       data: {
-                        artistId: '550e8400-e29b-41d4-a716-446655440010',
-                        selected: true,
-                        fanitude_points: 1250
+                        updated_artists: 3,
+                        artists: [
+                          {
+                            id: '550e8400-e29b-41d4-a716-446655440010',
+                            name: 'Taylor Swift',
+                            fanitude_points: 1250,
+                            last_listening_minutes: 450
+                          },
+                          {
+                            id: '550e8400-e29b-41d4-a716-446655440011',
+                            name: 'Ed Sheeran',
+                            fanitude_points: 980,
+                            last_listening_minutes: 320
+                          },
+                          {
+                            id: '550e8400-e29b-41d4-a716-446655440012',
+                            name: 'Adele',
+                            fanitude_points: 1450,
+                            last_listening_minutes: 520
+                          }
+                        ]
                       }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Non autorisé',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Token manquant',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
                     }
                   }
                 }

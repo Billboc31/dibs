@@ -22,10 +22,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`🔄 Synchronisation des stats pour les artistes sélectionnés par l'utilisateur: ${user.id}`)
+    // Récupérer les paramètres optionnels
+    const body = await request.json().catch(() => ({}))
+    const { artistIds } = body // Liste optionnelle d'artistes spécifiques à synchroniser
 
-    // Récupérer SEULEMENT les artistes que l'utilisateur a déjà sélectionnés
-    const { data: selectedArtists, error: selectedError } = await supabaseAdmin
+    if (artistIds && Array.isArray(artistIds)) {
+      console.log(`🔄 Synchronisation des stats pour ${artistIds.length} artistes spécifiques de l'utilisateur: ${user.id}`)
+    } else {
+      console.log(`🔄 Synchronisation des stats pour TOUS les artistes sélectionnés par l'utilisateur: ${user.id}`)
+    }
+
+    // Construire la requête pour récupérer les artistes sélectionnés
+    let query = supabaseAdmin
       .from('user_artists')
       .select(`
         artist_id,
@@ -39,6 +47,13 @@ export async function POST(request: NextRequest) {
         )
       `)
       .eq('user_id', user.id)
+
+    // Si des artistes spécifiques sont demandés, filtrer sur ceux-ci
+    if (artistIds && Array.isArray(artistIds) && artistIds.length > 0) {
+      query = query.in('artist_id', artistIds)
+    }
+
+    const { data: selectedArtists, error: selectedError } = await query
 
     if (selectedError) {
       console.error('❌ Erreur récupération artistes sélectionnés:', selectedError)
