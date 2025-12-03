@@ -555,6 +555,113 @@ const spec = {
       }
     },
 
+    '/api/user/artists/followed': {
+      get: {
+        tags: ['Artists'],
+        summary: '⭐ Artistes suivis avec stats à jour',
+        'x-priority': 'P0',
+        'x-auth': true,
+        security: [{ BearerAuth: [] }],
+        description: 'Récupère la liste des artistes sélectionnés par l\'utilisateur avec leurs scores de fanitude et minutes d\'écoute. Effectue automatiquement un sync pour mettre à jour les données avant de les retourner.',
+        responses: {
+          200: {
+            description: 'Liste des artistes suivis avec stats',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Artistes suivis avec stats mises à jour',
+                    value: {
+                      success: true,
+                      data: {
+                        artists: [
+                          {
+                            id: '550e8400-e29b-41d4-a716-446655440010',
+                            name: 'Taylor Swift',
+                            spotify_id: '06HL4z0CvFAxyc27GXpf02',
+                            apple_music_id: null,
+                            deezer_id: null,
+                            image_url: 'https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647',
+                            fanitude_points: 1450,
+                            last_listening_minutes: 520,
+                            followed_since: '2024-11-15T14:30:00Z',
+                            last_updated: '2024-12-03T16:45:00Z'
+                          },
+                          {
+                            id: '550e8400-e29b-41d4-a716-446655440011',
+                            name: 'Ed Sheeran',
+                            spotify_id: '6eUKZXaKkcviH0Ku9w2n3V',
+                            apple_music_id: null,
+                            deezer_id: null,
+                            image_url: 'https://i.scdn.co/image/ab67616d0000b273ba5db46f4b838ef6027e6f96',
+                            fanitude_points: 1250,
+                            last_listening_minutes: 450,
+                            followed_since: '2024-11-20T09:15:00Z',
+                            last_updated: '2024-12-03T16:45:00Z'
+                          },
+                          {
+                            id: '550e8400-e29b-41d4-a716-446655440012',
+                            name: 'Adele',
+                            spotify_id: '4dpARuHxo51G3z768sgnrY',
+                            apple_music_id: null,
+                            deezer_id: null,
+                            image_url: 'https://i.scdn.co/image/ab67616d0000b273c6b2c87a75b2d2ccbf4e4c3b',
+                            fanitude_points: 980,
+                            last_listening_minutes: 320,
+                            followed_since: '2024-11-25T12:00:00Z',
+                            last_updated: '2024-12-03T16:45:00Z'
+                          }
+                        ],
+                        stats: {
+                          total_followed: 3,
+                          total_fanitude_points: 3680,
+                          total_listening_minutes: 1290,
+                          average_fanitude_points: 1227
+                        },
+                        sync_performed: true
+                      }
+                    }
+                  },
+                  no_artists: {
+                    summary: 'Aucun artiste suivi',
+                    value: {
+                      success: true,
+                      data: {
+                        artists: [],
+                        stats: {
+                          total_followed: 0,
+                          total_fanitude_points: 0,
+                          total_listening_minutes: 0,
+                          average_fanitude_points: 0
+                        },
+                        sync_performed: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Non autorisé',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Token manquant',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
     '/api/user/artists/sync': {
       post: {
         tags: ['Artists'],
