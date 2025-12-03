@@ -745,3 +745,125 @@ export async function disconnectSpotify(): Promise<boolean> {
   }
 }
 
+/**
+ * Get Spotify artists specific to a user (from their listening history)
+ */
+export async function getSpotifyUserArtists(userId: string): Promise<Array<{ id: string; name: string; image_url: string; spotify_id: string }>> {
+  try {
+    console.log(`🎵 Récupération des artistes Spotify pour l'utilisateur: ${userId}`)
+
+    // Récupérer le token Spotify de l'utilisateur
+    const { data: connection } = await supabaseAdmin
+      .from('user_streaming_platforms')
+      .select(`
+        access_token, 
+        refresh_token,
+        streaming_platforms!inner (
+          name,
+          slug
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('streaming_platforms.slug', 'spotify')
+      .single()
+
+    if (!connection) {
+      console.log('❌ Aucune connexion Spotify trouvée pour cet utilisateur')
+      return []
+    }
+
+    let accessToken = connection.access_token
+
+    // Vérifier si le token est valide
+    const userInfo = await getSpotifyUserInfo(accessToken)
+    if (!userInfo) {
+      console.log('🔄 Token expiré, tentative de refresh...')
+      const newToken = await refreshSpotifyToken(connection.refresh_token)
+      if (!newToken) {
+        console.log('❌ Impossible de rafraîchir le token Spotify')
+        return []
+      }
+      accessToken = newToken
+    }
+
+    // Récupérer les artistes de l'utilisateur depuis Spotify
+    const allArtists: SpotifyArtist[] = []
+
+    // 1. Top artistes
+    try {
+      const topArtists = await fetchSpotifyTopArtists(accessToken, 'medium_term', 50)
+      allArtists.push(...topArtists)
+      console.log(`📊 ${topArtists.length} top artistes récupérés`)
+    } catch (error) {
+      console.log('⚠️ Erreur récupération top artistes:', error)
+    }
+
+    // 2. Artistes suivis
+    try {
+      const followedArtists = await fetchSpotifyFollowedArtists(accessToken, 50)
+      allArtists.push(...followedArtists)
+      console.log(`📊 ${followedArtists.length} artistes suivis récupérés`)
+    } catch (error) {
+      console.log('⚠️ Erreur récupération artistes suivis:', error)
+    }
+
+    // 3. Artistes des pistes récemment écoutées
+    try {
+      const recentTracks = await fetchSpotifyRecentlyPlayed(accessToken, 50)
+      const recentArtists = recentTracks.flatMap(track => track.artists)
+      
+      // Récupérer les détails complets des artistes
+      const uniqueArtistIds = Array.from(new Set(recentArtists.map(a => a.id)))
+      for (const artistId of uniqueArtistIds.slice(0, 20)) { // Limiter à 20 pour éviter trop d'appels API
+        const artistDetails = await fetchSpotifyArtistDetails(artistId, accessToken)
+        if (artistDetails) {
+          allArtists.push(artistDetails)
+        }
+      }
+      console.log(`📊 ${uniqueArtistIds.length} artistes des pistes récentes récupérés`)
+    } catch (error) {
+      console.log('⚠️ Erreur récupération artistes récents:', error)
+    }
+
+    // Dédupliquer les artistes par ID Spotify
+    const uniqueArtists = allArtists.reduce((acc, artist) => {
+      if (!acc.find(a => a.id === artist.id)) {
+        acc.push(artist)
+      }
+      return acc
+    }, [] as SpotifyArtist[])
+
+    console.log(`🎵 ${uniqueArtists.length} artistes uniques trouvés pour l'utilisateur`)
+
+    // Synchroniser avec la base de données et retourner les IDs
+    const artistsData = []
+    for (const spotifyArtist of uniqueArtists) {
+      // Upsert dans la table artists
+      const { data: artist, error } = await supabaseAdmin
+        .from('artists')
+        .upsert({
+          spotify_id: spotifyArtist.id,
+          name: spotifyArtist.name,
+          image_url: spotifyArtist.images?.[0]?.url || null,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'spotify_id',
+          ignoreDuplicates: false
+        })
+        .select('id, name, image_url, spotify_id')
+        .single()
+
+      if (artist) {
+        artistsData.push(artist)
+      }
+    }
+
+    console.log(`✅ ${artistsData.length} artistes synchronisés en base pour l'utilisateur`)
+    return artistsData
+
+  } catch (error) {
+    console.error('❌ Erreur récupération artistes utilisateur Spotify:', error)
+    return []
+  }
+}
+
