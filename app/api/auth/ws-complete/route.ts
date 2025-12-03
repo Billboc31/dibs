@@ -111,16 +111,15 @@ export async function GET(request: NextRequest) {
           })
 
           // URL de redirection vers notre callback spécial
-          // URL de callback Supabase standard (avec paramètres auth automatiques)
-          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://dibs-poc0.vercel.app'
-          const redirectTo = `${baseUrl}/auth/callback?redirect_to=${encodeURIComponent(`${baseUrl}/auth/callback-ws?email=${encodeURIComponent(email)}`)}`
-
-          // Envoyer le Magic Link
+          // Utiliser l'URL de callback par défaut de Supabase (pas de emailRedirectTo)
+          // Cela garantit que Supabase ajoute les bons paramètres d'authentification
+          
+          // Envoyer le Magic Link SANS redirection personnalisée
           const { data, error } = await supabase.auth.signInWithOtp({
             email: email,
             options: {
               shouldCreateUser: true,
-              emailRedirectTo: redirectTo,
+              // Pas de emailRedirectTo - utilise l'URL par défaut configurée dans Supabase
             }
           })
 
@@ -146,18 +145,78 @@ export async function GET(request: NextRequest) {
             message: 'Magic Link envoyé ! Cliquez sur le lien dans votre email.',
             email: email,
             message_id: data?.messageId || null,
-            redirect_to: redirectTo,
             timestamp: new Date().toISOString()
           })
 
-          // 3. Attendre le callback (le token sera envoyé par le callback)
+          // 3. Attendre l'authentification via Supabase onAuthStateChange
           send({
             step: 4,
             status: 'waiting_for_click',
-            message: 'En attente du clic sur le Magic Link...',
+            message: 'En attente du clic sur le Magic Link... (Authentification automatique)',
             email: email,
             timestamp: new Date().toISOString()
           })
+
+          // Écouter les changements d'authentification Supabase
+          const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log('🔔 Auth state change:', event, session?.user?.email)
+            
+            if (event === 'SIGNED_IN' && session && session.user?.email === email) {
+              console.log('✅ Utilisateur authentifié via Magic Link:', session.user.email)
+              
+              if (!isClosed) {
+                send({
+                  step: 5,
+                  status: 'authenticated',
+                  message: 'Authentification réussie !',
+                  session: {
+                    access_token: session.access_token,
+                    refresh_token: session.refresh_token,
+                    expires_in: session.expires_in || 3600
+                  },
+                  user: {
+                    id: session.user.id,
+                    email: session.user.email,
+                    display_name: session.user.user_metadata?.display_name || session.user.email
+                  },
+                  timestamp: new Date().toISOString()
+                })
+
+                // Fermer le WebSocket après succès
+                setTimeout(() => {
+                  closeWebSocket('Authentification réussie')
+                }, 2000)
+              }
+
+              // Nettoyer le listener
+              authListener?.subscription?.unsubscribe()
+            }
+          })
+
+          // Modifier la fonction de fermeture pour nettoyer le listener
+          const originalCloseWebSocket = closeWebSocket
+          const closeWebSocketWithCleanup = (reason: string) => {
+            console.log('🧹 Nettoyage du listener auth')
+            authListener?.subscription?.unsubscribe()
+            originalCloseWebSocket(reason)
+          }
+
+          // Remplacer les appels à closeWebSocket par closeWebSocketWithCleanup dans les timeouts
+          if (timeout) {
+            clearTimeout(timeout)
+            timeout = setTimeout(() => {
+              if (!isClosed) {
+                send({
+                  status: 'timeout',
+                  message: 'Timeout - Connexion fermée après 5 minutes',
+                  timestamp: new Date().toISOString()
+                })
+                setTimeout(() => {
+                  closeWebSocketWithCleanup('Timeout 5 minutes')
+                }, 100)
+              }
+            }, 5 * 60 * 1000)
+          }
 
         } catch (error) {
           send({
