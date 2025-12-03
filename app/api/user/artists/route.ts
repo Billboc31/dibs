@@ -1,5 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { refreshSpotifyToken } from '@/lib/spotify-api'
+
+// Helper function to make Spotify API calls with automatic token refresh
+async function fetchSpotifyWithRefresh(url: string, accessToken: string, refreshToken: string, userId: string): Promise<any> {
+  const makeRequest = async (token: string) => {
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    
+    if (response.status === 401) {
+      // Token expired, need to refresh
+      throw new Error('TOKEN_EXPIRED')
+    }
+    
+    if (!response.ok) {
+      throw new Error(`Spotify API error: ${response.status}`)
+    }
+    
+    return response.json()
+  }
+
+  try {
+    // Try with current token
+    return await makeRequest(accessToken)
+  } catch (error: any) {
+    if (error.message === 'TOKEN_EXPIRED') {
+      console.log('🔄 Token Spotify expiré, refresh en cours...')
+      
+      // Refresh the token
+      const newAccessToken = await refreshSpotifyToken(refreshToken)
+      if (!newAccessToken) {
+        throw new Error('Failed to refresh Spotify token')
+      }
+      
+      // Update token in database
+      await supabaseAdmin
+        .from('user_streaming_platforms')
+        .update({ access_token: newAccessToken })
+        .eq('user_id', userId)
+        .eq('platform_id', (await supabaseAdmin
+          .from('streaming_platforms')
+          .select('id')
+          .eq('slug', 'spotify')
+          .single()
+        ).data?.id)
+      
+      console.log('✅ Token Spotify refreshé avec succès')
+      
+      // Retry with new token
+      return await makeRequest(newAccessToken)
+    }
+    throw error
+  }
+}
 
 // GET /api/user/artists - Liste des artistes suivis (paginée)
 export async function GET(request: NextRequest) {
@@ -70,29 +124,47 @@ export async function GET(request: NextRequest) {
         // Récupérer le token Spotify de l'utilisateur
         const { data: connection } = await supabaseAdmin
           .from('user_streaming_platforms')
-          .select('access_token')
+          .select('access_token, refresh_token')
           .eq('user_id', user.id)
           .eq('platform_id', connectedPlatforms.find(p => (p.streaming_platforms as any).slug === 'spotify')?.platform_id)
           .single()
 
-        if (!connection?.access_token) {
+        if (!connection?.access_token || !connection?.refresh_token) {
           console.log('⚠️ Pas de token Spotify pour cet utilisateur')
         } else {
-          // Récupérer les artistes depuis l'API Spotify
+          // Récupérer les artistes depuis l'API Spotify avec gestion du refresh
           console.log(`🔑 Récupération des artistes Spotify...`)
           
           const [topArtists, followedArtists, recentTracks] = await Promise.all([
-            fetch(`https://api.spotify.com/v1/me/top/artists?time_range=medium_term&limit=50`, {
-              headers: { 'Authorization': `Bearer ${connection.access_token}` }
-            }).then(res => res.json()).then(data => data.items || []).catch(() => []),
+            fetchSpotifyWithRefresh(
+              'https://api.spotify.com/v1/me/top/artists?time_range=medium_term&limit=50',
+              connection.access_token,
+              connection.refresh_token,
+              user.id
+            ).then(data => data.items || []).catch(err => {
+              console.log(`❌ Erreur top artists:`, err.message)
+              return []
+            }),
             
-            fetch(`https://api.spotify.com/v1/me/following?type=artist&limit=50`, {
-              headers: { 'Authorization': `Bearer ${connection.access_token}` }
-            }).then(res => res.json()).then(data => data.artists?.items || []).catch(() => []),
+            fetchSpotifyWithRefresh(
+              'https://api.spotify.com/v1/me/following?type=artist&limit=50',
+              connection.access_token,
+              connection.refresh_token,
+              user.id
+            ).then(data => data.artists?.items || []).catch(err => {
+              console.log(`❌ Erreur followed artists:`, err.message)
+              return []
+            }),
             
-            fetch(`https://api.spotify.com/v1/me/player/recently-played?limit=50`, {
-              headers: { 'Authorization': `Bearer ${connection.access_token}` }
-            }).then(res => res.json()).then(data => data.items || []).catch(() => [])
+            fetchSpotifyWithRefresh(
+              'https://api.spotify.com/v1/me/player/recently-played?limit=50',
+              connection.access_token,
+              connection.refresh_token,
+              user.id
+            ).then(data => data.items || []).catch(err => {
+              console.log(`❌ Erreur recent tracks:`, err.message)
+              return []
+            })
           ])
 
           // Combiner tous les artistes et dédupliquer avec vérifications de sécurité
