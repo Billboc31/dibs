@@ -78,54 +78,21 @@ export async function GET(request: NextRequest) {
         if (!connection?.access_token) {
           console.log('⚠️ Pas de token Spotify pour cet utilisateur')
         } else {
-          // Récupérer les artistes depuis l'API Spotify avec gestion d'erreurs
-          console.log(`🔑 Utilisation du token Spotify: ${connection.access_token.substring(0, 20)}...`)
+          // Récupérer les artistes depuis l'API Spotify
+          console.log(`🔑 Récupération des artistes Spotify...`)
           
           const [topArtists, followedArtists, recentTracks] = await Promise.all([
             fetch(`https://api.spotify.com/v1/me/top/artists?time_range=medium_term&limit=50`, {
               headers: { 'Authorization': `Bearer ${connection.access_token}` }
-            }).then(async res => {
-              if (!res.ok) {
-                console.log(`⚠️ Erreur top artists: ${res.status} ${res.statusText}`)
-                return []
-              }
-              const data = await res.json()
-              console.log(`✅ Top artists: ${data.items?.length || 0} trouvés`)
-              return Array.isArray(data.items) ? data.items : []
-            }).catch(err => {
-              console.log(`❌ Erreur top artists:`, err.message)
-              return []
-            }),
+            }).then(res => res.json()).then(data => data.items || []).catch(() => []),
             
             fetch(`https://api.spotify.com/v1/me/following?type=artist&limit=50`, {
               headers: { 'Authorization': `Bearer ${connection.access_token}` }
-            }).then(async res => {
-              if (!res.ok) {
-                console.log(`⚠️ Erreur followed artists: ${res.status} ${res.statusText}`)
-                return []
-              }
-              const data = await res.json()
-              console.log(`✅ Followed artists: ${data.artists?.items?.length || 0} trouvés`)
-              return Array.isArray(data.artists?.items) ? data.artists.items : []
-            }).catch(err => {
-              console.log(`❌ Erreur followed artists:`, err.message)
-              return []
-            }),
+            }).then(res => res.json()).then(data => data.artists?.items || []).catch(() => []),
             
             fetch(`https://api.spotify.com/v1/me/player/recently-played?limit=50`, {
               headers: { 'Authorization': `Bearer ${connection.access_token}` }
-            }).then(async res => {
-              if (!res.ok) {
-                console.log(`⚠️ Erreur recent tracks: ${res.status} ${res.statusText}`)
-                return []
-              }
-              const data = await res.json()
-              console.log(`✅ Recent tracks: ${data.items?.length || 0} trouvés`)
-              return Array.isArray(data.items) ? data.items : []
-            }).catch(err => {
-              console.log(`❌ Erreur recent tracks:`, err.message)
-              return []
-            })
+            }).then(res => res.json()).then(data => data.items || []).catch(() => [])
           ])
 
           // Combiner tous les artistes et dédupliquer avec vérifications de sécurité
@@ -190,65 +157,12 @@ export async function GET(request: NextRequest) {
 
     console.log(`📊 Total artistes spécifiques à l'utilisateur: ${userSpecificArtistIds.length}`)
 
-    // Si aucun artiste spécifique trouvé, utiliser un fallback avec des artistes de la base globale
     if (userSpecificArtistIds.length === 0) {
-      console.log('⚠️ Aucun artiste spécifique trouvé, utilisation du fallback avec artistes globaux')
-      
-      // Fallback: récupérer un échantillon réaliste d'artistes Spotify (simuler un compte utilisateur)
-      // Limiter à ~30-50 artistes pour simuler un compte Spotify réaliste
-      const maxUserArtists = 42 // Nombre réaliste d'artistes pour un utilisateur
-      
-      const { data: fallbackArtists } = await supabaseAdmin
-        .from('artists')
-        .select('id, name, spotify_id, apple_music_id, deezer_id, image_url')
-        .not('spotify_id', 'is', null)
-        .order('name')
-        .range(offset, Math.min(offset + limit - 1, maxUserArtists - 1))
-
-      // Le total est limité au nombre réaliste d'artistes d'un utilisateur
-      const fallbackTotal = Math.min(maxUserArtists, 186) // Ne jamais dépasser le nombre réel dans la DB
-
-      // Récupérer les artistes sélectionnés par l'utilisateur
-      const { data: selectedArtists } = await supabaseAdmin
-        .from('user_artists')
-        .select('artist_id')
-        .eq('user_id', user.id)
-
-      const selectedArtistsSet = new Set(selectedArtists?.map(ua => ua.artist_id) || [])
-
-      const artists = fallbackArtists?.map(artist => ({
-        id: artist.id,
-        name: artist.name,
-        spotify_id: artist.spotify_id,
-        apple_music_id: artist.apple_music_id,
-        deezer_id: artist.deezer_id,
-        image_url: artist.image_url,
-        selected: selectedArtistsSet.has(artist.id)
-      })) || []
-
-      const selectedCount = artists.filter(a => a.selected).length
-      const hasMore = fallbackTotal > offset + limit
-
-      console.log(`🔄 Fallback: ${artists.length} artistes affichés, ${fallbackTotal} total simulé, ${selectedCount} sélectionnés`)
-
+      console.log('❌ Aucun artiste trouvé pour cet utilisateur')
       return NextResponse.json({
-        success: true,
-        data: {
-          artists,
-          pagination: {
-            page,
-            limit,
-            total: fallbackTotal,
-            hasMore
-          },
-          stats: {
-            total_artists: fallbackTotal,
-            selected_artists: selectedCount,
-            displayed_artists: artists.length
-          }
-        },
-        message: `Simulation d'un compte Spotify avec ${fallbackTotal} artistes (API Spotify non accessible en mode développement)`
-      })
+        success: false,
+        error: 'Impossible de récupérer les artistes Spotify. Vérifiez votre connexion Spotify ou réessayez plus tard.'
+      }, { status: 400 })
     }
 
     // Récupérer les artistes de l'utilisateur avec pagination
