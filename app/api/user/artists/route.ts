@@ -30,38 +30,49 @@ export async function GET(request: NextRequest) {
 
     console.log(`🔍 Recherche artistes pour user: ${user.id}`)
 
-    // Vérifier si l'utilisateur a une connexion Spotify
-    const { data: spotifyConnection } = await supabaseAdmin
+    // Récupérer toutes les plateformes connectées par l'utilisateur
+    const { data: connectedPlatforms } = await supabaseAdmin
       .from('user_streaming_platforms')
       .select(`
         access_token, 
         refresh_token,
+        platform_id,
         streaming_platforms!inner (
+          id,
           name,
           slug
         )
       `)
       .eq('user_id', user.id)
-      .eq('streaming_platforms.slug', 'spotify')
-      .single()
 
-    if (!spotifyConnection) {
+    if (!connectedPlatforms || connectedPlatforms.length === 0) {
       return NextResponse.json({
         success: false,
-        error: 'Aucune connexion Spotify trouvée. Connectez-vous d\'abord à Spotify via /connect-platform'
+        error: 'Aucune plateforme de streaming connectée. Connectez-vous d\'abord à une plateforme via /connect-platform'
       }, { status: 400 })
     }
 
-    // Synchroniser les artistes Spotify du user (appel API + upsert dans table globale)
-    console.log('🎵 Synchronisation des artistes Spotify du user...')
-    const { syncSpotifyData } = await import('@/lib/spotify-api')
-    
-    try {
-      const syncedCount = await syncSpotifyData(user.id)
-      console.log(`🔄 ${syncedCount} artistes synchronisés depuis Spotify`)
-    } catch (error) {
-      console.error('❌ Erreur sync Spotify:', error)
-      // Continue même en cas d'erreur de sync
+    console.log(`🔗 Plateformes connectées: ${connectedPlatforms.map(p => p.streaming_platforms.name).join(', ')}`)
+
+    // Synchroniser les artistes pour chaque plateforme connectée
+    for (const platform of connectedPlatforms) {
+      const platformName = platform.streaming_platforms.slug
+      console.log(`🎵 Synchronisation des artistes ${platform.streaming_platforms.name}...`)
+      
+      try {
+        if (platformName === 'spotify') {
+          const { syncSpotifyData } = await import('@/lib/spotify-api')
+          const syncedCount = await syncSpotifyData(user.id)
+          console.log(`🔄 ${syncedCount} artistes synchronisés depuis Spotify`)
+        }
+        // TODO: Ajouter d'autres plateformes (Apple Music, Deezer) quand elles seront implémentées
+        else {
+          console.log(`⚠️ Synchronisation non implémentée pour ${platform.streaming_platforms.name}`)
+        }
+      } catch (error) {
+        console.error(`❌ Erreur sync ${platform.streaming_platforms.name}:`, error)
+        // Continue même en cas d'erreur de sync
+      }
     }
 
     // Vérifier d'abord s'il y a des artistes dans la table artists
@@ -83,21 +94,35 @@ export async function GET(request: NextRequest) {
     if (count === 0) {
       console.log('⚠️ Aucun artiste utilisateur trouvé, vérification des artistes Spotify disponibles...')
       
-      // Récupérer quelques artistes Spotify pour voir s'ils existent
-      const { data: spotifyArtists, error: spotifyError } = await supabaseAdmin
+      // Récupérer quelques artistes des plateformes connectées pour voir s'ils existent
+      let debugQuery = supabaseAdmin
         .from('artists')
-        .select('id, name, spotify_id')
-        .not('spotify_id', 'is', null)
+        .select('id, name, spotify_id, apple_music_id, deezer_id')
         .limit(5)
+
+      if (orConditions.length > 0) {
+        debugQuery = debugQuery.or(orConditions.join(','))
+      }
+
+      const { data: platformArtists } = await debugQuery
       
-      console.log('🎵 Artistes Spotify disponibles:', spotifyArtists?.length || 0)
-      if (spotifyArtists && spotifyArtists.length > 0) {
-        console.log('📋 Exemples d\'artistes Spotify:', spotifyArtists.map(a => ({ name: a.name, spotify_id: a.spotify_id })))
+      console.log('🎵 Artistes des plateformes disponibles:', platformArtists?.length || 0)
+      if (platformArtists && platformArtists.length > 0) {
+        console.log('📋 Exemples d\'artistes:', platformArtists.map(a => ({ 
+          name: a.name, 
+          spotify_id: a.spotify_id,
+          apple_music_id: a.apple_music_id,
+          deezer_id: a.deezer_id
+        })))
       }
     }
 
-    // Récupérer TOUS les artistes Spotify avec le statut de sélection
-    const { data: allArtists, error: artistsError } = await supabaseAdmin
+    // Construire les filtres pour les plateformes connectées
+    const platformFilters = connectedPlatforms.map(p => p.streaming_platforms.slug)
+    console.log(`🔍 Recherche d'artistes pour les plateformes: ${platformFilters.join(', ')}`)
+
+    // Récupérer TOUS les artistes des plateformes connectées avec le statut de sélection
+    let artistsQuery = supabaseAdmin
       .from('artists')
       .select(`
         id,
@@ -108,9 +133,26 @@ export async function GET(request: NextRequest) {
         image_url,
         created_at
       `)
-      .not('spotify_id', 'is', null)
       .order('name')
       .range(offset, offset + limit - 1)
+
+    // Appliquer les filtres selon les plateformes connectées
+    const orConditions = []
+    if (platformFilters.includes('spotify')) {
+      orConditions.push('spotify_id.not.is.null')
+    }
+    if (platformFilters.includes('apple_music')) {
+      orConditions.push('apple_music_id.not.is.null')
+    }
+    if (platformFilters.includes('deezer')) {
+      orConditions.push('deezer_id.not.is.null')
+    }
+
+    if (orConditions.length > 0) {
+      artistsQuery = artistsQuery.or(orConditions.join(','))
+    }
+
+    const { data: allArtists, error: artistsError } = await artistsQuery
 
     if (artistsError) {
       console.error('❌ Error fetching artists:', artistsError)
@@ -142,17 +184,22 @@ export async function GET(request: NextRequest) {
       }
     }) || []
 
-    // Recalculer le total avec tous les artistes Spotify
-    const { count: totalSpotifyCount } = await supabaseAdmin
+    // Recalculer le total avec tous les artistes des plateformes connectées
+    let totalCountQuery = supabaseAdmin
       .from('artists')
       .select('*', { count: 'exact', head: true })
-      .not('spotify_id', 'is', null)
 
-    const hasMore = (totalSpotifyCount || 0) > offset + limit
+    if (orConditions.length > 0) {
+      totalCountQuery = totalCountQuery.or(orConditions.join(','))
+    }
+
+    const { count: totalPlatformsCount } = await totalCountQuery
+
+    const hasMore = (totalPlatformsCount || 0) > offset + limit
     const selectedCount = artists.filter(a => a.selected).length
 
     console.log(`✅ Fetched ${artists?.length || 0} artists for user ${user.id} (page ${page})`)
-    console.log(`📊 Total Spotify: ${totalSpotifyCount}, Sélectionnés: ${selectedCount}`)
+    console.log(`📊 Total plateformes: ${totalPlatformsCount}, Sélectionnés: ${selectedCount}`)
     
     return NextResponse.json({
       success: true,
@@ -161,13 +208,14 @@ export async function GET(request: NextRequest) {
         pagination: {
           page,
           limit,
-          total: totalSpotifyCount || 0,
+          total: totalPlatformsCount || 0,
           hasMore
         },
         stats: {
-          total_spotify_artists: totalSpotifyCount || 0,
+          total_artists: totalPlatformsCount || 0,
           selected_artists: selectedCount,
-          displayed_artists: artists?.length || 0
+          displayed_artists: artists?.length || 0,
+          connected_platforms: connectedPlatforms.map(p => p.streaming_platforms.name)
         }
       }
     })
