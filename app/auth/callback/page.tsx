@@ -18,8 +18,9 @@ export default function AuthCallback() {
         const type = searchParams.get('type')
         const access_token = searchParams.get('access_token')
         const refresh_token = searchParams.get('refresh_token')
+        const redirect_to = searchParams.get('redirect_to')
 
-        console.log('Auth callback params:', { token_hash, type, access_token })
+        console.log('Auth callback params:', { token_hash, type, access_token, redirect_to })
 
         if (token_hash && type) {
           // Vérifier le token Magic Link
@@ -39,16 +40,28 @@ export default function AuthCallback() {
           if (data.user && data.session) {
             setStatus('Authentification réussie ! ✅')
             
-            // L'authentification va déclencher l'événement onAuthStateChange
-            // dans l'app mobile qui écoute via WebSocket Supabase
-            
             console.log('✅ Utilisateur authentifié:', data.user.email)
             console.log('✅ Session créée:', data.session.access_token)
             
-            // Attendre un peu pour que l'app mobile reçoive l'événement
-            setTimeout(() => {
-              setStatus('Vous pouvez fermer cette page et retourner dans l\'app mobile.')
-            }, 2000)
+            // Si redirect_to est spécifié, rediriger vers cette URL
+            if (redirect_to) {
+              console.log('🔄 Redirection vers:', redirect_to)
+              setStatus('Redirection vers l\'app mobile...')
+              
+              // Ajouter les tokens à l'URL de redirection pour le WebSocket
+              const redirectUrl = new URL(redirect_to)
+              redirectUrl.searchParams.set('access_token', data.session.access_token)
+              redirectUrl.searchParams.set('refresh_token', data.session.refresh_token)
+              
+              setTimeout(() => {
+                window.location.href = redirectUrl.toString()
+              }, 1000)
+            } else {
+              // Comportement par défaut
+              setTimeout(() => {
+                setStatus('Vous pouvez fermer cette page et retourner dans l\'app mobile.')
+              }, 2000)
+            }
           }
 
         } else if (access_token && refresh_token) {
@@ -70,9 +83,24 @@ export default function AuthCallback() {
             setStatus('Authentification réussie ! ✅')
             console.log('✅ Session établie:', data.session.user?.email)
             
-            setTimeout(() => {
-              setStatus('Vous pouvez fermer cette page et retourner dans l\'app mobile.')
-            }, 2000)
+            // Si redirect_to est spécifié, rediriger vers cette URL
+            if (redirect_to) {
+              console.log('🔄 Redirection vers:', redirect_to)
+              setStatus('Redirection vers l\'app mobile...')
+              
+              // Ajouter les tokens à l'URL de redirection pour le WebSocket
+              const redirectUrl = new URL(redirect_to)
+              redirectUrl.searchParams.set('access_token', data.session.access_token)
+              redirectUrl.searchParams.set('refresh_token', data.session.refresh_token)
+              
+              setTimeout(() => {
+                window.location.href = redirectUrl.toString()
+              }, 1000)
+            } else {
+              setTimeout(() => {
+                setStatus('Vous pouvez fermer cette page et retourner dans l\'app mobile.')
+              }, 2000)
+            }
           }
 
         } else {

@@ -111,9 +111,9 @@ export async function GET(request: NextRequest) {
           })
 
           // URL de redirection vers notre callback spécial
-          const redirectTo = process.env.NEXT_PUBLIC_BASE_URL 
-            ? `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback-ws?email=${encodeURIComponent(email)}`
-            : `https://dibs-poc0.vercel.app/auth/callback-ws?email=${encodeURIComponent(email)}`
+          // URL de callback Supabase standard (avec paramètres auth automatiques)
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://dibs-poc0.vercel.app'
+          const redirectTo = `${baseUrl}/auth/callback?redirect_to=${encodeURIComponent(`${baseUrl}/auth/callback-ws?email=${encodeURIComponent(email)}`)}`
 
           // Envoyer le Magic Link
           const { data, error } = await supabase.auth.signInWithOtp({

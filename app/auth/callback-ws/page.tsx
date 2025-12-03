@@ -55,6 +55,13 @@ export default function AuthCallbackWS() {
         const code = searchParams.get('code')
         const error_code = searchParams.get('error_code')
         const error_description = searchParams.get('error_description')
+        
+        console.log('🔍 Paramètres callback-ws:', {
+          email, token_hash, type, 
+          access_token: access_token?.substring(0, 20) + '...',
+          refresh_token: refresh_token?.substring(0, 20) + '...',
+          code, error_code, error_description
+        })
 
         // Vérifier s'il y a une erreur dans l'URL
         if (error_code || error_description) {
