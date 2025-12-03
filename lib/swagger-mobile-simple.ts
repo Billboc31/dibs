@@ -320,17 +320,36 @@ const spec = {
     '/api/user/artists': {
       get: {
         tags: ['Artists'],
-        summary: '🎵 Artistes utilisateur',
+        summary: '🎵 Artistes utilisateur (avec pagination)',
         'x-priority': 'P0',
+        'x-auth': true,
         security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', default: 0 },
+            description: 'Numéro de page (commence à 0)',
+            example: 0
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', default: 10 },
+            description: 'Nombre d\'artistes par page',
+            example: 10
+          }
+        ],
         responses: {
           200: {
             description: 'Liste des artistes',
             content: {
               'application/json': {
                 examples: {
-                  success: {
-                    summary: 'Artistes avec sélection',
+                  page_0: {
+                    summary: 'Page 0 (première page)',
                     value: {
                       success: true,
                       data: {
@@ -338,26 +357,168 @@ const spec = {
                           {
                             id: '550e8400-e29b-41d4-a716-446655440010',
                             name: 'Taylor Swift',
-                            image_url: 'https://example.com/taylor.jpg',
-                            spotify_id: 'spotify123',
+                            image_url: 'https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647',
+                            spotify_id: '06HL4z0CvFAxyc27GXpf02',
+                            apple_music_id: null,
+                            deezer_id: null,
                             selected: true,
-                            fanitude_points: 1250
+                            fanitude_points: 1250,
+                            last_listening_minutes: 45,
+                            created_at: '2024-01-15T10:30:00Z'
                           },
                           {
                             id: '550e8400-e29b-41d4-a716-446655440011',
                             name: 'Ed Sheeran',
-                            image_url: 'https://example.com/ed.jpg',
-                            spotify_id: 'spotify456',
+                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb12a2ef08d00dd7451a6dbed6',
+                            spotify_id: '6eUKZXaKkcviH0Ku9w2n3V',
+                            apple_music_id: null,
+                            deezer_id: null,
                             selected: false,
-                            fanitude_points: 0
+                            fanitude_points: 0,
+                            last_listening_minutes: 0,
+                            created_at: '2024-01-15T10:31:00Z'
+                          },
+                          {
+                            id: '550e8400-e29b-41d4-a716-446655440012',
+                            name: 'Billie Eilish',
+                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb4f7b3c6ac5a7e9c6b2c5f1a2',
+                            spotify_id: '6qqNVTkY8uBg9cP3Jd8DAH',
+                            apple_music_id: null,
+                            deezer_id: null,
+                            selected: true,
+                            fanitude_points: 890,
+                            last_listening_minutes: 32,
+                            created_at: '2024-01-15T10:32:00Z'
                           }
                         ],
+                        pagination: {
+                          page: 0,
+                          limit: 10,
+                          total: 156,
+                          hasMore: true
+                        },
                         stats: {
-                          total_spotify_artists: 150,
-                          selected_artists: 12,
-                          displayed_artists: 2
+                          total_artists: 156,
+                          selected_artists: 23,
+                          displayed_artists: 3,
+                          connected_platforms: ['Spotify']
                         }
                       }
+                    }
+                  },
+                  page_1: {
+                    summary: 'Page 1 (page suivante)',
+                    value: {
+                      success: true,
+                      data: {
+                        artists: [
+                          {
+                            id: '550e8400-e29b-41d4-a716-446655440013',
+                            name: 'Dua Lipa',
+                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb2a038d3bf875d23e4aeaa84e',
+                            spotify_id: '6M2wZ9GZgrQXHCFfjv46we',
+                            apple_music_id: null,
+                            deezer_id: null,
+                            selected: false,
+                            fanitude_points: 0,
+                            last_listening_minutes: 0,
+                            created_at: '2024-01-15T10:33:00Z'
+                          },
+                          {
+                            id: '550e8400-e29b-41d4-a716-446655440014',
+                            name: 'The Weeknd',
+                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb214f3cf1cbe7139c1e26ffbb',
+                            spotify_id: '1Xyo4u8uXC1ZmMpatF05PJ',
+                            apple_music_id: null,
+                            deezer_id: null,
+                            selected: true,
+                            fanitude_points: 2100,
+                            last_listening_minutes: 78,
+                            created_at: '2024-01-15T10:34:00Z'
+                          }
+                        ],
+                        pagination: {
+                          page: 1,
+                          limit: 10,
+                          total: 156,
+                          hasMore: true
+                        },
+                        stats: {
+                          total_artists: 156,
+                          selected_artists: 23,
+                          displayed_artists: 2,
+                          connected_platforms: ['Spotify']
+                        }
+                      }
+                    }
+                  },
+                  last_page: {
+                    summary: 'Dernière page (hasMore: false)',
+                    value: {
+                      success: true,
+                      data: {
+                        artists: [
+                          {
+                            id: '550e8400-e29b-41d4-a716-446655440099',
+                            name: 'Zara Larsson',
+                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb1b808c5d3c3c8b1a3b4d5e6f',
+                            spotify_id: '1Cs0zKBU1kc0i8ypK3B9ai',
+                            apple_music_id: null,
+                            deezer_id: null,
+                            selected: false,
+                            fanitude_points: 0,
+                            last_listening_minutes: 0,
+                            created_at: '2024-01-15T12:45:00Z'
+                          }
+                        ],
+                        pagination: {
+                          page: 15,
+                          limit: 10,
+                          total: 156,
+                          hasMore: false
+                        },
+                        stats: {
+                          total_artists: 156,
+                          selected_artists: 23,
+                          displayed_artists: 1,
+                          connected_platforms: ['Spotify']
+                        }
+                      }
+                    }
+                  },
+                  empty: {
+                    summary: 'Aucun artiste trouvé',
+                    value: {
+                      success: true,
+                      data: {
+                        artists: [],
+                        pagination: {
+                          page: 0,
+                          limit: 10,
+                          total: 0,
+                          hasMore: false
+                        },
+                        stats: {
+                          total_artists: 0,
+                          selected_artists: 0,
+                          displayed_artists: 0,
+                          connected_platforms: []
+                        }
+                      }
+                    }
+                  },
+                  no_platform: {
+                    summary: 'Aucune plateforme connectée',
+                    value: {
+                      success: false,
+                      error: 'Aucune plateforme de streaming connectée. Connectez-vous d\'abord à une plateforme via /connect-platform'
+                    }
+                  },
+                  error_auth: {
+                    summary: 'Token manquant',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
                     }
                   }
                 }
@@ -781,3 +942,4 @@ const spec = {
 }
 
 export const swaggerSpecMobile = spec
+
