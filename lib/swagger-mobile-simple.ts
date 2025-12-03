@@ -320,81 +320,19 @@ const spec = {
     '/api/user/artists': {
       get: {
         tags: ['Artists'],
-        summary: '🎵 Artistes utilisateur (avec pagination)',
+        summary: '🎵 Liste des artistes disponibles (toutes plateformes)',
         'x-priority': 'P0',
         'x-auth': true,
         security: [{ BearerAuth: [] }],
-        description: `
-**📄 PAGINATION - Comment récupérer les pages :**
-
-**URLs d'exemple :**
-- Page 1 : \`GET /api/user/artists?page=0&limit=10\`
-- Page 2 : \`GET /api/user/artists?page=1&limit=10\`
-- Page 3 : \`GET /api/user/artists?page=2&limit=10\`
-
-**Code JavaScript :**
-\`\`\`javascript
-// Récupérer la première page
-const response1 = await fetch('/api/user/artists?page=0&limit=10', {
-  headers: { 'Authorization': 'Bearer YOUR_TOKEN' }
-});
-
-// Récupérer la page suivante
-const response2 = await fetch('/api/user/artists?page=1&limit=10', {
-  headers: { 'Authorization': 'Bearer YOUR_TOKEN' }
-});
-
-// Vérifier s'il y a plus de pages
-const data = await response1.json();
-if (data.data.pagination.hasMore) {
-  // Il y a plus de pages à charger
-  const nextPage = data.data.pagination.page + 1;
-  const nextResponse = await fetch(\`/api/user/artists?page=\${nextPage}&limit=10\`);
-}
-\`\`\`
-
-**React Native exemple :**
-\`\`\`javascript
-const [artists, setArtists] = useState([]);
-const [page, setPage] = useState(0);
-const [hasMore, setHasMore] = useState(true);
-
-const loadArtists = async (pageNum = 0, append = false) => {
-  const response = await fetch(\`/api/user/artists?page=\${pageNum}&limit=10\`, {
-    headers: { 'Authorization': \`Bearer \${token}\` }
-  });
-  const data = await response.json();
-  
-  if (append) {
-    setArtists(prev => [...prev, ...data.data.artists]);
-  } else {
-    setArtists(data.data.artists);
-  }
-  
-  setHasMore(data.data.pagination.hasMore);
-  setPage(pageNum);
-};
-
-// Charger la page suivante (scroll infini)
-const loadMore = () => {
-  if (hasMore) {
-    loadArtists(page + 1, true);
-  }
-};
-\`\`\`
-        `,
+        description: 'Retourne TOUS les artistes disponibles pour l\'utilisateur sur toutes ses plateformes connectées. Chaque artiste indique s\'il est sélectionné (dans user_artists) ou non. Utilisé pour l\'interface de listing mobile.',
         parameters: [
           {
             name: 'page',
             in: 'query',
             required: false,
             schema: { type: 'integer', default: 0 },
-            description: 'Numéro de page (commence à 0). Page 0 = premiers 10 artistes, Page 1 = artistes 11-20, etc.',
-            examples: {
-              first_page: { summary: 'Première page', value: 0 },
-              second_page: { summary: 'Deuxième page', value: 1 },
-              third_page: { summary: 'Troisième page', value: 2 }
-            }
+            description: 'Numéro de page (commence à 0)',
+            example: 0
           },
           {
             name: 'limit',
@@ -402,11 +340,7 @@ const loadMore = () => {
             required: false,
             schema: { type: 'integer', default: 10, minimum: 1, maximum: 50 },
             description: 'Nombre d\'artistes par page (1-50)',
-            examples: {
-              small: { summary: 'Petite page', value: 5 },
-              default: { summary: 'Page normale', value: 10 },
-              large: { summary: 'Grande page', value: 20 }
-            }
+            example: 10
           }
         ],
         responses: {
@@ -415,8 +349,8 @@ const loadMore = () => {
             content: {
               'application/json': {
                 examples: {
-                  page_0: {
-                    summary: 'Page 0 (première page)',
+                  success: {
+                    summary: 'Artistes avec sélection',
                     value: {
                       success: true,
                       data: {
@@ -424,168 +358,44 @@ const loadMore = () => {
                           {
                             id: '550e8400-e29b-41d4-a716-446655440010',
                             name: 'Taylor Swift',
-                            image_url: 'https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647',
                             spotify_id: '06HL4z0CvFAxyc27GXpf02',
                             apple_music_id: null,
                             deezer_id: null,
-                            selected: true,
-                            fanitude_points: 1250,
-                            last_listening_minutes: 45,
-                            created_at: '2024-01-15T10:30:00Z'
+                            image_url: 'https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647',
+                            selected: true
                           },
                           {
                             id: '550e8400-e29b-41d4-a716-446655440011',
                             name: 'Ed Sheeran',
-                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb12a2ef08d00dd7451a6dbed6',
                             spotify_id: '6eUKZXaKkcviH0Ku9w2n3V',
                             apple_music_id: null,
                             deezer_id: null,
-                            selected: false,
-                            fanitude_points: 0,
-                            last_listening_minutes: 0,
-                            created_at: '2024-01-15T10:31:00Z'
+                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb12a2ef08d00dd7451a6dbed6',
+                            selected: false
                           },
                           {
                             id: '550e8400-e29b-41d4-a716-446655440012',
                             name: 'Billie Eilish',
-                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb4f7b3c6ac5a7e9c6b2c5f1a2',
                             spotify_id: '6qqNVTkY8uBg9cP3Jd8DAH',
                             apple_music_id: null,
                             deezer_id: null,
-                            selected: true,
-                            fanitude_points: 890,
-                            last_listening_minutes: 32,
-                            created_at: '2024-01-15T10:32:00Z'
+                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb4f7b3c6ac5a7e9c6b2c5f1a2',
+                            selected: true
                           }
                         ],
                         pagination: {
                           page: 0,
                           limit: 10,
-                          total: 156,
+                          total: 186,
                           hasMore: true
                         },
                         stats: {
-                          total_artists: 156,
+                          total_artists: 186,
                           selected_artists: 23,
-                          displayed_artists: 3,
-                          connected_platforms: ['Spotify']
+                          displayed_artists: 3
                         }
+
                       }
-                    }
-                  },
-                  page_1: {
-                    summary: 'Page 1 (page suivante)',
-                    value: {
-                      success: true,
-                      data: {
-                        artists: [
-                          {
-                            id: '550e8400-e29b-41d4-a716-446655440013',
-                            name: 'Dua Lipa',
-                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb2a038d3bf875d23e4aeaa84e',
-                            spotify_id: '6M2wZ9GZgrQXHCFfjv46we',
-                            apple_music_id: null,
-                            deezer_id: null,
-                            selected: false,
-                            fanitude_points: 0,
-                            last_listening_minutes: 0,
-                            created_at: '2024-01-15T10:33:00Z'
-                          },
-                          {
-                            id: '550e8400-e29b-41d4-a716-446655440014',
-                            name: 'The Weeknd',
-                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb214f3cf1cbe7139c1e26ffbb',
-                            spotify_id: '1Xyo4u8uXC1ZmMpatF05PJ',
-                            apple_music_id: null,
-                            deezer_id: null,
-                            selected: true,
-                            fanitude_points: 2100,
-                            last_listening_minutes: 78,
-                            created_at: '2024-01-15T10:34:00Z'
-                          }
-                        ],
-                        pagination: {
-                          page: 1,
-                          limit: 10,
-                          total: 156,
-                          hasMore: true
-                        },
-                        stats: {
-                          total_artists: 156,
-                          selected_artists: 23,
-                          displayed_artists: 2,
-                          connected_platforms: ['Spotify']
-                        }
-                      }
-                    }
-                  },
-                  last_page: {
-                    summary: 'Dernière page (hasMore: false)',
-                    value: {
-                      success: true,
-                      data: {
-                        artists: [
-                          {
-                            id: '550e8400-e29b-41d4-a716-446655440099',
-                            name: 'Zara Larsson',
-                            image_url: 'https://i.scdn.co/image/ab6761610000e5eb1b808c5d3c3c8b1a3b4d5e6f',
-                            spotify_id: '1Cs0zKBU1kc0i8ypK3B9ai',
-                            apple_music_id: null,
-                            deezer_id: null,
-                            selected: false,
-                            fanitude_points: 0,
-                            last_listening_minutes: 0,
-                            created_at: '2024-01-15T12:45:00Z'
-                          }
-                        ],
-                        pagination: {
-                          page: 15,
-                          limit: 10,
-                          total: 156,
-                          hasMore: false
-                        },
-                        stats: {
-                          total_artists: 156,
-                          selected_artists: 23,
-                          displayed_artists: 1,
-                          connected_platforms: ['Spotify']
-                        }
-                      }
-                    }
-                  },
-                  empty: {
-                    summary: 'Aucun artiste trouvé',
-                    value: {
-                      success: true,
-                      data: {
-                        artists: [],
-                        pagination: {
-                          page: 0,
-                          limit: 10,
-                          total: 0,
-                          hasMore: false
-                        },
-                        stats: {
-                          total_artists: 0,
-                          selected_artists: 0,
-                          displayed_artists: 0,
-                          connected_platforms: []
-                        }
-                      }
-                    }
-                  },
-                  no_platform: {
-                    summary: 'Aucune plateforme connectée',
-                    value: {
-                      success: false,
-                      error: 'Aucune plateforme de streaming connectée. Connectez-vous d\'abord à une plateforme via /connect-platform'
-                    }
-                  },
-                  error_auth: {
-                    summary: 'Token manquant',
-                    value: {
-                      success: false,
-                      error: 'Authorization header required'
                     }
                   }
                 }
@@ -726,215 +536,6 @@ const loadMore = () => {
                         amount_euros: 20,
                         currency: 'EUR'
                       }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-
-    // === PLATEFORMES ===
-    '/api/platforms': {
-      get: {
-        tags: ['Platforms'],
-        summary: '📱 Liste des plateformes disponibles',
-        'x-priority': 'P0',
-        responses: {
-          200: {
-            description: 'Liste des plateformes',
-            content: {
-              'application/json': {
-                examples: {
-                  success: {
-                    summary: 'Plateformes disponibles',
-                    value: {
-                      success: true,
-                      data: [
-                        {
-                          id: '550e8400-e29b-41d4-a716-446655440001',
-                          name: 'Spotify',
-                          slug: 'spotify',
-                          color_hex: '#1DB954',
-                          logo_url: 'https://example.com/spotify-logo.png',
-                          is_available: true,
-                          description: 'Service de streaming musical',
-                          created_at: '2024-01-01T00:00:00Z'
-                        },
-                        {
-                          id: '550e8400-e29b-41d4-a716-446655440002',
-                          name: 'Apple Music',
-                          slug: 'apple_music',
-                          color_hex: '#FA243C',
-                          logo_url: 'https://example.com/apple-music-logo.png',
-                          is_available: false,
-                          description: 'Service de streaming d\'Apple',
-                          created_at: '2024-01-01T00:00:00Z'
-                        },
-                        {
-                          id: '550e8400-e29b-41d4-a716-446655440003',
-                          name: 'Deezer',
-                          slug: 'deezer',
-                          color_hex: '#FF6600',
-                          logo_url: 'https://example.com/deezer-logo.png',
-                          is_available: false,
-                          description: 'Service de streaming français',
-                          created_at: '2024-01-01T00:00:00Z'
-                        }
-                      ]
-                    }
-                  },
-                  error: {
-                    summary: 'Erreur serveur',
-                    value: {
-                      success: false,
-                      error: 'Erreur lors de la récupération des plateformes'
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-
-    '/api/user/platforms': {
-      get: {
-        tags: ['Platforms'],
-        summary: '🔗 Plateformes connectées de l\'utilisateur',
-        'x-priority': 'P0',
-        'x-auth': true,
-        security: [{ BearerAuth: [] }],
-        responses: {
-          200: {
-            description: 'Plateformes connectées',
-            content: {
-              'application/json': {
-                examples: {
-                  success: {
-                    summary: 'Utilisateur avec plateformes connectées',
-                    value: {
-                      success: true,
-                      data: [
-                        {
-                          id: '550e8400-e29b-41d4-a716-446655440001',
-                          platform_id: '550e8400-e29b-41d4-a716-446655440001',
-                          user_id: '550e8400-e29b-41d4-a716-446655440000',
-                          connected_at: '2024-11-15T10:30:00Z',
-                          last_sync: '2024-11-30T15:45:00Z',
-                          platform: {
-                            id: '550e8400-e29b-41d4-a716-446655440001',
-                            name: 'Spotify',
-                            slug: 'spotify',
-                            color_hex: '#1DB954',
-                            logo_url: 'https://example.com/spotify-logo.png',
-                            is_available: true
-                          }
-                        }
-                      ]
-                    }
-                  },
-                  empty: {
-                    summary: 'Aucune plateforme connectée',
-                    value: {
-                      success: true,
-                      data: []
-                    }
-                  },
-                  error_auth: {
-                    summary: 'Token manquant',
-                    value: {
-                      success: false,
-                      error: 'Authorization header required'
-                    }
-                  }
-                }
-              }
-            }
-          },
-          401: {
-            description: 'Non autorisé',
-            content: {
-              'application/json': {
-                examples: {
-                  unauthorized: {
-                    summary: 'Token invalide',
-                    value: {
-                      success: false,
-                      error: 'Invalid or expired token'
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      delete: {
-        tags: ['Platforms'],
-        summary: '🗑️ Déconnecter une plateforme',
-        'x-priority': 'P1',
-        'x-auth': true,
-        security: [{ BearerAuth: [] }],
-        requestBody: {
-          content: {
-            'application/json': {
-              examples: {
-                disconnect_spotify: {
-                  summary: 'Déconnecter Spotify',
-                  value: {
-                    platform_id: '550e8400-e29b-41d4-a716-446655440001'
-                  }
-                }
-              }
-            }
-          }
-        },
-        responses: {
-          200: {
-            description: 'Plateforme déconnectée',
-            content: {
-              'application/json': {
-                examples: {
-                  success: {
-                    summary: 'Déconnexion réussie',
-                    value: {
-                      success: true,
-                      message: 'Plateforme déconnectée avec succès',
-                      platform: 'Spotify'
-                    }
-                  },
-                  not_found: {
-                    summary: 'Plateforme non trouvée',
-                    value: {
-                      success: false,
-                      error: 'Cette plateforme n\'est pas connectée à votre compte'
-                    }
-                  },
-                  error_auth: {
-                    summary: 'Token manquant',
-                    value: {
-                      success: false,
-                      error: 'Authorization header required'
-                    }
-                  }
-                }
-              }
-            }
-          },
-          401: {
-            description: 'Non autorisé',
-            content: {
-              'application/json': {
-                examples: {
-                  unauthorized: {
-                    summary: 'Token invalide',
-                    value: {
-                      success: false,
-                      error: 'Invalid or expired token'
                     }
                   }
                 }
