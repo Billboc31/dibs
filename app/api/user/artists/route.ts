@@ -137,18 +137,23 @@ export async function GET(request: NextRequest) {
       selectedArtists?.map(ua => [ua.artist_id, ua]) || []
     )
 
-    // Combiner les données : tous les artistes + flag de sélection
+    // Combiner les données : tous les artistes + flag de sélection SEULEMENT
     const artists = allArtists?.map(artist => {
       const userArtist = selectedArtistsMap.get(artist.id)
       return {
-        ...artist,
-        selected: !!userArtist,
-        fanitude_points: userArtist?.fanitude_points || 0,
-        last_listening_minutes: userArtist?.last_listening_minutes || 0
+        id: artist.id,
+        name: artist.name,
+        spotify_id: artist.spotify_id,
+        apple_music_id: artist.apple_music_id,
+        deezer_id: artist.deezer_id,
+        image_url: artist.image_url,
+        selected: !!userArtist
       }
     }) || []
 
-    // Calculer le total d'artistes des plateformes connectées
+    // TODO: Calculer le total d'artistes spécifiques à cet utilisateur
+    // Pour l'instant, on utilise le total de la BDD mais il faudrait récupérer
+    // les artistes spécifiques à l'utilisateur depuis les APIs des plateformes
     let totalCountQuery = supabaseAdmin
       .from('artists')
       .select('*', { count: 'exact', head: true })
@@ -162,7 +167,7 @@ export async function GET(request: NextRequest) {
     const selectedCount = artists.filter(a => a.selected).length
 
     console.log(`✅ Fetched ${artists?.length || 0} artists for user ${user.id} (page ${page})`)
-    console.log(`📊 Total plateformes: ${totalPlatformArtists}, Sélectionnés: ${selectedCount}`)
+    console.log(`📊 Total artistes utilisateur: ${totalPlatformArtists}, Sélectionnés: ${selectedCount}`)
     
     return NextResponse.json({
       success: true,
@@ -177,8 +182,7 @@ export async function GET(request: NextRequest) {
         stats: {
           total_artists: totalPlatformArtists || 0,
           selected_artists: selectedCount,
-          displayed_artists: artists?.length || 0,
-          connected_platforms: connectedPlatforms.map(p => (p.streaming_platforms as any).name)
+          displayed_artists: artists?.length || 0
         }
       }
     })
