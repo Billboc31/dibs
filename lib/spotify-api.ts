@@ -187,12 +187,22 @@ export async function refreshSpotifyToken(refreshToken: string): Promise<string 
     const data = await response.json()
 
     if (data.access_token) {
+      console.log('✅ Token Spotify refreshé avec succès')
       return data.access_token
+    }
+
+    // Vérifier si le refresh token est révoqué
+    if (data.error === 'invalid_grant' || response.status === 400) {
+      console.log('🚨 Refresh token Spotify révoqué:', data.error_description || data.error)
+      throw new Error('SPOTIFY_TOKEN_REVOKED')
     }
 
     console.error('❌ Spotify refresh error:', data)
     return null
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'SPOTIFY_TOKEN_REVOKED') {
+      throw error // Re-throw pour que l'appelant puisse gérer
+    }
     console.error('❌ Error refreshing Spotify token:', error)
     return null
   }
@@ -746,124 +756,38 @@ export async function disconnectSpotify(): Promise<boolean> {
 }
 
 /**
- * Get Spotify artists specific to a user (from their listening history)
+ * Nettoyer une connexion Spotify révoquée (côté serveur)
  */
-export async function getSpotifyUserArtists(userId: string): Promise<Array<{ id: string; name: string; image_url: string; spotify_id: string }>> {
+export async function disconnectRevokedSpotifyUser(userId: string): Promise<void> {
   try {
-    console.log(`🎵 Récupération des artistes Spotify pour l'utilisateur: ${userId}`)
-
-    // Récupérer le token Spotify de l'utilisateur
-    const { data: connection } = await supabaseAdmin
-      .from('user_streaming_platforms')
-      .select(`
-        access_token, 
-        refresh_token,
-        streaming_platforms!inner (
-          name,
-          slug
-        )
-      `)
-      .eq('user_id', userId)
-      .eq('streaming_platforms.slug', 'spotify')
+    console.log('🧹 Nettoyage de la connexion Spotify révoquée pour l\'utilisateur:', userId)
+    
+    // Récupérer l'ID de la plateforme Spotify
+    const { data: platform } = await supabaseAdmin
+      .from('streaming_platforms')
+      .select('id')
+      .eq('slug', 'spotify')
       .single()
 
-    if (!connection) {
-      console.log('❌ Aucune connexion Spotify trouvée pour cet utilisateur')
-      return []
+    if (!platform) {
+      console.error('❌ Plateforme Spotify non trouvée')
+      return
     }
 
-    let accessToken = connection.access_token
+    // Supprimer la connexion révoquée de la base
+    const { error } = await supabaseAdmin
+      .from('user_streaming_platforms')
+      .delete()
+      .eq('user_id', userId)
+      .eq('platform_id', platform.id)
 
-    // Vérifier si le token est valide
-    const userInfo = await getSpotifyUserInfo(accessToken)
-    if (!userInfo) {
-      console.log('🔄 Token expiré, tentative de refresh...')
-      const newToken = await refreshSpotifyToken(connection.refresh_token)
-      if (!newToken) {
-        console.log('❌ Impossible de rafraîchir le token Spotify')
-        return []
-      }
-      accessToken = newToken
+    if (error) {
+      console.error('❌ Erreur nettoyage connexion Spotify:', error)
+    } else {
+      console.log('✅ Connexion Spotify révoquée nettoyée avec succès')
     }
-
-    // Récupérer les artistes de l'utilisateur depuis Spotify
-    const allArtists: SpotifyArtist[] = []
-
-    // 1. Top artistes
-    try {
-      const topArtists = await fetchSpotifyTopArtists(accessToken, 'medium_term', 50)
-      allArtists.push(...topArtists)
-      console.log(`📊 ${topArtists.length} top artistes récupérés`)
-    } catch (error) {
-      console.log('⚠️ Erreur récupération top artistes:', error)
-    }
-
-    // 2. Artistes suivis
-    try {
-      const followedArtists = await fetchSpotifyFollowedArtists(accessToken, 50)
-      allArtists.push(...followedArtists)
-      console.log(`📊 ${followedArtists.length} artistes suivis récupérés`)
-    } catch (error) {
-      console.log('⚠️ Erreur récupération artistes suivis:', error)
-    }
-
-    // 3. Artistes des pistes récemment écoutées
-    try {
-      const recentTracks = await fetchSpotifyRecentlyPlayed(accessToken, 50)
-      const recentArtists = recentTracks.flatMap(track => track.artists)
-      
-      // Récupérer les détails complets des artistes
-      const uniqueArtistIds = Array.from(new Set(recentArtists.map(a => a.id)))
-      for (const artistId of uniqueArtistIds.slice(0, 20)) { // Limiter à 20 pour éviter trop d'appels API
-        const artistDetails = await fetchSpotifyArtistDetails(artistId, accessToken)
-        if (artistDetails) {
-          allArtists.push(artistDetails)
-        }
-      }
-      console.log(`📊 ${uniqueArtistIds.length} artistes des pistes récentes récupérés`)
-    } catch (error) {
-      console.log('⚠️ Erreur récupération artistes récents:', error)
-    }
-
-    // Dédupliquer les artistes par ID Spotify
-    const uniqueArtists = allArtists.reduce((acc, artist) => {
-      if (!acc.find(a => a.id === artist.id)) {
-        acc.push(artist)
-      }
-      return acc
-    }, [] as SpotifyArtist[])
-
-    console.log(`🎵 ${uniqueArtists.length} artistes uniques trouvés pour l'utilisateur`)
-
-    // Synchroniser avec la base de données et retourner les IDs
-    const artistsData = []
-    for (const spotifyArtist of uniqueArtists) {
-      // Upsert dans la table artists
-      const { data: artist, error } = await supabaseAdmin
-        .from('artists')
-        .upsert({
-          spotify_id: spotifyArtist.id,
-          name: spotifyArtist.name,
-          image_url: spotifyArtist.images?.[0]?.url || null,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'spotify_id',
-          ignoreDuplicates: false
-        })
-        .select('id, name, image_url, spotify_id')
-        .single()
-
-      if (artist) {
-        artistsData.push(artist)
-      }
-    }
-
-    console.log(`✅ ${artistsData.length} artistes synchronisés en base pour l'utilisateur`)
-    return artistsData
-
   } catch (error) {
-    console.error('❌ Erreur récupération artistes utilisateur Spotify:', error)
-    return []
+    console.error('❌ Erreur lors du nettoyage de la connexion révoquée:', error)
   }
 }
 

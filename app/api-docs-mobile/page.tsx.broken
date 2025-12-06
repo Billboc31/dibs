@@ -22,7 +22,6 @@ export default function ApiDocsMobilePage() {
   const [testingEndpoint, setTestingEndpoint] = useState<string | null>(null)
   const [testToken, setTestToken] = useState('')
   const [testBody, setTestBody] = useState('{}')
-  const [queryParams, setQueryParams] = useState<Record<string, string>>({})
   const [testEmail, setTestEmail] = useState('')
   const [testResult, setTestResult] = useState<any>(null)
   const [testLoading, setTestLoading] = useState(false)
@@ -30,7 +29,7 @@ export default function ApiDocsMobilePage() {
   
   // États pour le WebSocket Magic Link
   const [wsEmail, setWsEmail] = useState('')
-  const [wsMessages, setWsMessages] = useState<Array<{timestamp: string, message: string, type?: string, data?: any}>>([])
+  const [wsMessages, setWsMessages] = useState<Array<{timestamp: string, message: string}>>([])
   const [wsConnected, setWsConnected] = useState(false)
   
   // États pour le système de paiement
@@ -194,109 +193,38 @@ export default function ApiDocsMobilePage() {
     setWsConnected(true)
     setWsMessages([])
 
-    console.log('🚀 Démarrage WebSocket pour:', email)
-    
     const eventSource = new EventSource(`${spec?.servers?.[0]?.url || ''}/api/auth/ws-complete?email=${encodeURIComponent(email)}`)
     
-    // Ajouter message de connexion
-    setWsMessages([{
-      timestamp: new Date().toLocaleTimeString(),
-      message: '🔌 Connexion WebSocket en cours...',
-      type: 'info',
-      data: { email }
-    }])
-    
-    eventSource.onopen = () => {
-      console.log('✅ WebSocket ouvert')
-      setWsMessages(prev => [...prev, {
-        timestamp: new Date().toLocaleTimeString(),
-        message: '✅ WebSocket connecté avec succès',
-        type: 'success',
-        data: {}
-      }])
-    }
-    
     eventSource.onmessage = (event) => {
-      console.log('📥 Message WebSocket reçu:', event.data)
+      const data = JSON.parse(event.data)
+      const timestamp = new Date().toLocaleTimeString()
       
-      try {
-        const data = JSON.parse(event.data)
-        const timestamp = new Date().toLocaleTimeString()
-        
-        // Déterminer le type de message pour la couleur
-        let messageType = 'info'
-        if (data.status === 'error') messageType = 'error'
-        else if (data.status === 'authenticated') messageType = 'success'
-        else if (data.status === 'magic_link_sent') messageType = 'success'
-        else if (data.status === 'timeout') messageType = 'warning'
-        
-        setWsMessages(prev => [...prev, {
-          timestamp,
-          message: `${data.status || 'message'}: ${data.message || 'Données reçues'}`,
-          type: messageType,
-          data: data
-        }])
+      setWsMessages(prev => [...prev, {
+        timestamp,
+        message: `${data.type}: ${data.message || JSON.stringify(data)}`
+      }])
 
-        // Fermer automatiquement sur certains statuts
-        if (data.status === 'authenticated') {
-          console.log('🎉 Authentification réussie, token reçu:', data.session?.access_token?.substring(0, 20) + '...')
-          setTimeout(() => {
-            eventSource.close()
-            setWsConnected(false)
-            setWsMessages(prev => [...prev, {
-              timestamp: new Date().toLocaleTimeString(),
-              message: '🔴 WebSocket fermé automatiquement (authentification réussie)',
-              type: 'info',
-              data: {}
-            }])
-          }, 2000)
-        } else if (data.status === 'timeout' || data.status === 'error') {
-          setTimeout(() => {
-            eventSource.close()
-            setWsConnected(false)
-          }, 1000)
-        }
-      } catch (e) {
-        console.error('❌ Erreur parsing JSON:', e)
-        setWsMessages(prev => [...prev, {
-          timestamp: new Date().toLocaleTimeString(),
-          message: `❌ Message non-JSON reçu: ${event.data}`,
-          type: 'error',
-          data: { raw: event.data }
-        }])
+      if (data.type === 'authenticated' || data.type === 'timeout' || data.type === 'error') {
+        eventSource.close()
+        setWsConnected(false)
       }
     }
 
-    eventSource.onerror = (error) => {
-      console.error('❌ Erreur WebSocket:', error)
+    eventSource.onerror = () => {
       setWsConnected(false)
       setWsMessages(prev => [...prev, {
         timestamp: new Date().toLocaleTimeString(),
-        message: '❌ Erreur de connexion WebSocket',
-        type: 'error',
-        data: { error }
+        message: 'error: Connexion fermée'
       }])
     }
 
-    // Timeout après 6 minutes (plus long que le serveur)
-    const timeoutId = setTimeout(() => {
+    // Timeout après 2 minutes
+    setTimeout(() => {
       if (wsConnected) {
-        console.log('⏰ Timeout client WebSocket')
         eventSource.close()
         setWsConnected(false)
-        setWsMessages(prev => [...prev, {
-          timestamp: new Date().toLocaleTimeString(),
-          message: '⏰ Timeout client (6 minutes) - Connexion fermée',
-          type: 'warning',
-          data: {}
-        }])
       }
-    }, 6 * 60 * 1000)
-
-    // Nettoyer le timeout si la connexion se ferme avant
-    eventSource.addEventListener('close', () => {
-      clearTimeout(timeoutId)
-    })
+    }, 120000)
   }
 
   const handleTokenChange = (value: string) => {
@@ -337,26 +265,13 @@ export default function ApiDocsMobilePage() {
     }
   }
 
-  const handleTestEndpoint = async (endpoint: Endpoint, queryParams?: Record<string, string>) => {
+  const handleTestEndpoint = async (endpoint: Endpoint) => {
     setTestLoading(true)
     setTestResult(null)
 
     try {
       const baseUrl = spec?.servers?.[0]?.url || ''
-      let url = `${baseUrl}${endpoint.path}`
-      
-      // Ajouter les paramètres de query s'ils sont fournis
-      if (queryParams && Object.keys(queryParams).length > 0) {
-        const params = new URLSearchParams()
-        Object.entries(queryParams).forEach(([key, value]) => {
-          if (value && value.trim() !== '') {
-            params.append(key, value.trim())
-          }
-        })
-        if (params.toString()) {
-          url += `?${params.toString()}`
-        }
-      }
+      const url = `${baseUrl}${endpoint.path}`
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
@@ -505,10 +420,71 @@ export default function ApiDocsMobilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Menu latéral */}
+      <div className="w-64 bg-white border-r border-gray-200 fixed h-full overflow-y-auto">
+        <div className="p-4">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">📱 Navigation</h2>
+          
+          {/* Sections du menu */}
+          <div className="space-y-2">
+            <a href="#authentication" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
+              🔐 Authentification
+            </a>
+            <a href="#user-management" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
+              👤 Gestion utilisateur
+            </a>
+            <a href="#artists" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
+              🎵 Artistes
+            </a>
+            <a href="#events" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
+              🎫 Événements
+            </a>
+            <a href="#wallet-payment" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
+              💳 Wallet & Paiement
+            </a>
+            <a href="#platforms" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
+              🎧 Plateformes
+            </a>
+            <a href="#qr-codes" className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
+              📱 QR Codes
+            </a>
+          </div>
+
+          {/* Tags filter dans le menu */}
+          <div className="mt-6">
+            <h3 className="text-sm font-medium text-gray-900 mb-2">🏷️ Filtrer par tag</h3>
+            <select
+              value={selectedTag}
+              onChange={(e) => setSelectedTag(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="all">Tous les endpoints</option>
+              {tags.map(tag => (
+                <option key={tag} value={tag}>{tag}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Search dans le menu */}
+          <div className="mt-4">
+            <h3 className="text-sm font-medium text-gray-900 mb-2">🔍 Recherche</h3>
+            <input
+              type="text"
+              placeholder="Rechercher un endpoint..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Contenu principal */}
+      <div className="flex-1 ml-64">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+          <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">📱 API Mobile DIBS</h1>
@@ -568,38 +544,9 @@ export default function ApiDocsMobilePage() {
             </div>
           </div>
 
-          {/* Information sur les révocations */}
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-            <h3 className="font-semibold text-orange-800 mb-2">🚨 Gestion des tokens révoqués</h3>
-            <div className="text-sm text-orange-700 space-y-2">
-              <p><strong>En mode développement</strong>, Spotify révoque fréquemment les tokens (max 25 utilisateurs).</p>
-              <p><strong>Si vous recevez :</strong> <code className="bg-orange-100 px-1 rounded">SPOTIFY_TOKEN_REVOKED</code></p>
-              <p><strong>Action :</strong> Reconnectez-vous à Spotify via <code>/connect-platform</code></p>
-              <p><strong>En production :</strong> Les révocations seront beaucoup plus rares.</p>
-            </div>
-          </div>
-
-          {/* Filtres */}
-          <div className="flex gap-4 items-center">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="🔍 Rechercher un endpoint..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg"
-              />
-            </div>
-            <select
-              value={selectedTag}
-              onChange={(e) => setSelectedTag(e.target.value)}
-              className="px-4 py-2 border rounded-lg"
-            >
-              <option value="all">Tous les tags</option>
-              {tags.map(tag => (
-                <option key={tag} value={tag}>{tag}</option>
-              ))}
-            </select>
+          {/* Info rapide */}
+          <div className="text-sm text-gray-600">
+            {filteredEndpoints.length} endpoint(s) • Utilisez le menu latéral pour naviguer
           </div>
         </div>
       </div>
@@ -654,19 +601,11 @@ export default function ApiDocsMobilePage() {
             <div key={`${endpoint.method}-${endpoint.path}`} className="bg-white rounded-lg shadow-sm border">
               <div 
                 className="p-4 cursor-pointer hover:bg-gray-50"
-                onClick={() => {
-                  const key = `${endpoint.method}-${endpoint.path}`
-                  const isExpanding = expandedEndpoint !== key
-                  setExpandedEndpoint(isExpanding ? key : null)
-                  
-                  // Pré-remplir automatiquement le corps avec le premier exemple
-                  if (isExpanding && endpoint.requestBodyExample && (endpoint.method === 'POST' || endpoint.method === 'PUT' || endpoint.method === 'PATCH')) {
-                    const firstExample = Object.values(endpoint.requestBodyExample)[0] as any
-                    if (firstExample?.value) {
-                      setTestBody(JSON.stringify(firstExample.value, null, 2))
-                    }
-                  }
-                }}
+                onClick={() => setExpandedEndpoint(
+                  expandedEndpoint === `${endpoint.method}-${endpoint.path}` 
+                    ? null 
+                    : `${endpoint.method}-${endpoint.path}`
+                )}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -727,32 +666,6 @@ export default function ApiDocsMobilePage() {
                     </div>
                   )}
 
-                  {/* Exemples de réponse */}
-                  {endpoint.responseExample && (
-                    <div className="mb-4">
-                      <h4 className="font-medium mb-2">📥 Exemples de réponse</h4>
-                      <div className="space-y-2">
-                        {Object.entries(endpoint.responseExample).map(([key, example]: [string, any]) => (
-                          <div key={key} className="border rounded p-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium text-sm">{example.summary}</span>
-                              <span className={`px-2 py-1 text-xs rounded ${
-                                key.includes('success') || key.includes('200') ? 'bg-green-100 text-green-800' : 
-                                key.includes('error') || key.includes('400') || key.includes('401') ? 'bg-red-100 text-red-800' : 
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {key.includes('200') ? '200' : key.includes('400') ? '400' : key.includes('401') ? '401' : 'Response'}
-                              </span>
-                            </div>
-                            <pre className="bg-gray-50 p-2 rounded text-sm overflow-x-auto">
-                              {JSON.stringify(example.value, null, 2)}
-                            </pre>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Section de test */}
                   <div className="border-t pt-4">
                     <div className="flex items-center justify-between mb-3">
@@ -785,7 +698,7 @@ export default function ApiDocsMobilePage() {
                                   }}
                                   className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
                                 >
-                                  📋 Exemple
+                                  📋 Utiliser l'exemple
                                 </button>
                               )}
                             </div>
@@ -793,82 +706,14 @@ export default function ApiDocsMobilePage() {
                               value={testBody}
                               onChange={(e) => setTestBody(e.target.value)}
                               className="w-full px-3 py-2 border rounded-md font-mono text-sm"
-                              rows={4}
-                              placeholder={endpoint.requestBodyExample ? 'Cliquez sur "Exemple" pour pré-remplir' : '{"key": "value"}'}
+                              rows={6}
+                              placeholder={endpoint.requestBodyExample ? 'Cliquez sur "Utiliser l\'exemple" pour pré-remplir' : '{"key": "value"}'}
                             />
                           </div>
                         )}
 
-                        {/* Paramètres de query pour différents endpoints */}
-                        {((endpoint.path === '/api/user/artists' && endpoint.method === 'GET') || 
-                          (endpoint.path === '/api/user/platforms' && endpoint.method === 'DELETE')) && (
-                          <div className="space-y-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                            {endpoint.path === '/api/user/artists' && endpoint.method === 'GET' && (
-                              <>
-                                <div className="font-medium text-blue-800">📄 Paramètres de pagination</div>
-                                <div className="grid grid-cols-2 gap-3">
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                      Page (0, 1, 2...)
-                                    </label>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={queryParams.page || '0'}
-                                      onChange={(e) => setQueryParams(prev => ({ ...prev, page: e.target.value }))}
-                                      className="w-full px-3 py-2 border rounded-md text-sm"
-                                      placeholder="0"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                      Limite (1-50)
-                                    </label>
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      max="50"
-                                      value={queryParams.limit || '10'}
-                                      onChange={(e) => setQueryParams(prev => ({ ...prev, limit: e.target.value }))}
-                                      className="w-full px-3 py-2 border rounded-md text-sm"
-                                      placeholder="10"
-                                    />
-                                  </div>
-                                </div>
-                                <div className="text-xs text-blue-600">
-                                  💡 URL finale: <code>{spec?.servers?.[0]?.url || ''}{endpoint.path}?page={queryParams.page || '0'}&limit={queryParams.limit || '10'}</code>
-                                </div>
-                              </>
-                            )}
-                            
-                            {endpoint.path === '/api/user/platforms' && endpoint.method === 'DELETE' && (
-                              <>
-                                <div className="font-medium text-blue-800">🗑️ Paramètres de déconnexion</div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Platform ID
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={queryParams.platformId || ''}
-                                    onChange={(e) => setQueryParams(prev => ({ ...prev, platformId: e.target.value }))}
-                                    className="w-full px-3 py-2 border rounded-md text-sm"
-                                    placeholder="550e8400-e29b-41d4-a716-446655440001"
-                                  />
-                                  <div className="text-xs text-gray-500 mt-1">
-                                    💡 Utilisez d'abord GET /api/user/platforms pour récupérer les IDs
-                                  </div>
-                                </div>
-                                <div className="text-xs text-blue-600">
-                                  💡 URL finale: <code>{spec?.servers?.[0]?.url || ''}{endpoint.path}?platformId={queryParams.platformId || 'PLATFORM_ID'}</code>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        )}
-
                         <button
-                          onClick={() => handleTestEndpoint(endpoint, queryParams)}
+                          onClick={() => handleTestEndpoint(endpoint)}
                           disabled={testLoading}
                           className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
                         >
@@ -894,20 +739,6 @@ export default function ApiDocsMobilePage() {
                                 </div>
                               )}
                               
-                              {/* Alerte spéciale pour les tokens révoqués */}
-                              {testResult.data?.error === 'SPOTIFY_TOKEN_REVOKED' && (
-                                <div className="mb-2 p-3 bg-orange-100 border border-orange-300 rounded-md">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-xl">🚨</span>
-                                    <span className="font-semibold text-orange-800">Token Spotify révoqué</span>
-                                  </div>
-                                  <p className="text-sm text-orange-700 mb-2">{testResult.data.message}</p>
-                                  <div className="text-sm text-orange-600">
-                                    <strong>Action requise :</strong> Allez sur <code className="bg-orange-200 px-1 rounded">/connect-platform</code> pour vous reconnecter à Spotify.
-                                  </div>
-                                </div>
-                              )}
-                              
                               <pre className="bg-gray-100 p-2 rounded text-sm overflow-x-auto">
                                 {JSON.stringify(testResult.data, null, 2)}
                               </pre>
@@ -930,75 +761,20 @@ export default function ApiDocsMobilePage() {
                           onChange={(e) => setWsEmail(e.target.value)}
                           className="w-full px-3 py-2 border rounded-md"
                         />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => testWebSocket(wsEmail)}
-                            disabled={!wsEmail || wsConnected}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                          >
-                            {wsConnected ? '🔌 WebSocket Actif' : '🚀 Démarrer WebSocket'}
-                          </button>
-                          {wsConnected && (
-                            <button
-                              onClick={() => {
-                                setWsConnected(false)
-                                setWsMessages(prev => [...prev, {
-                                  timestamp: new Date().toLocaleTimeString(),
-                                  message: '🔴 WebSocket fermé manuellement par l\'utilisateur',
-                                  type: 'warning',
-                                  data: {}
-                                }])
-                              }}
-                              className="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                            >
-                              🛑 Fermer
-                            </button>
-                          )}
-                        </div>
+                        <button
+                          onClick={() => testWebSocket(wsEmail)}
+                          disabled={!wsEmail || wsConnected}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {wsConnected ? 'WebSocket Connecté' : 'Tester WebSocket'}
+                        </button>
                         {wsMessages.length > 0 && (
-                          <div className="mt-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <h5 className="font-medium text-sm">📡 Messages WebSocket en temps réel:</h5>
-                              <button
-                                onClick={() => setWsMessages([])}
-                                className="px-2 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600"
-                              >
-                                🗑️ Effacer
-                              </button>
-                            </div>
-                            <div className="p-3 bg-black text-green-400 rounded text-xs max-h-60 overflow-y-auto font-mono">
-                              {wsMessages.map((msg, i) => (
-                                <div key={i} className="mb-2 border-b border-gray-700 pb-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-gray-400">[{msg.timestamp}]</span>
-                                    <span className={`px-1 rounded text-xs ${
-                                      msg.type === 'success' ? 'bg-green-600 text-white' :
-                                      msg.type === 'error' ? 'bg-red-600 text-white' :
-                                      msg.type === 'warning' ? 'bg-yellow-600 text-black' :
-                                      'bg-blue-600 text-white'
-                                    }`}>
-                                      {msg.type?.toUpperCase() || 'INFO'}
-                                    </span>
-                                  </div>
-                                  <div className="text-green-300 mb-1">{msg.message}</div>
-                                  {msg.data && Object.keys(msg.data).length > 0 && (
-                                    <details className="mt-1">
-                                      <summary className="text-gray-400 cursor-pointer text-xs hover:text-gray-300">
-                                        📋 Données JSON ({Object.keys(msg.data).length} propriétés)
-                                      </summary>
-                                      <pre className="mt-1 text-xs text-gray-300 bg-gray-800 p-2 rounded overflow-x-auto">
-                                        {JSON.stringify(msg.data, null, 2)}
-                                      </pre>
-                                    </details>
-                                  )}
-                                </div>
-                              ))}
-                              {wsConnected && (
-                                <div className="text-yellow-400 animate-pulse">
-                                  ⚡ WebSocket actif - En attente de messages...
-                                </div>
-                              )}
-                            </div>
+                          <div className="mt-2 p-2 bg-gray-100 rounded text-sm max-h-40 overflow-y-auto">
+                            {wsMessages.map((msg, i) => (
+                              <div key={i} className="mb-1">
+                                <span className="text-gray-500">{msg.timestamp}</span>: {msg.message}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>

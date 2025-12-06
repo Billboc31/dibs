@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { refreshSpotifyToken } from '@/lib/spotify-api'
+import { refreshSpotifyToken, disconnectRevokedSpotifyUser } from '@/lib/spotify-api'
 
 // POST /api/user/artists/sync - Synchroniser les artistes Spotify vers user_artists
 export async function POST(request: NextRequest) {
@@ -120,20 +120,29 @@ export async function POST(request: NextRequest) {
         if (error.message === 'TOKEN_EXPIRED') {
           console.log('🔄 Token Spotify expiré, refresh en cours...')
           
-          const newAccessToken = await refreshSpotifyToken(refreshToken)
-          if (!newAccessToken) {
-            throw new Error('Failed to refresh Spotify token')
+          try {
+            const newAccessToken = await refreshSpotifyToken(refreshToken)
+            if (!newAccessToken) {
+              throw new Error('Failed to refresh Spotify token')
+            }
+            
+            // Mettre à jour le token dans la base
+            await supabaseAdmin
+              .from('user_streaming_platforms')
+              .update({ access_token: newAccessToken })
+              .eq('user_id', user.id)
+              .eq('streaming_platforms.slug', 'spotify')
+            
+            console.log('✅ Token Spotify refreshé avec succès')
+            return await makeRequest(newAccessToken)
+          } catch (refreshError: any) {
+            if (refreshError.message === 'SPOTIFY_TOKEN_REVOKED') {
+              console.log('🚨 Token Spotify révoqué, nettoyage en cours...')
+              await disconnectRevokedSpotifyUser(user.id)
+              throw new Error('SPOTIFY_TOKEN_REVOKED')
+            }
+            throw refreshError
           }
-          
-          // Mettre à jour le token dans la base
-          await supabaseAdmin
-            .from('user_streaming_platforms')
-            .update({ access_token: newAccessToken })
-            .eq('user_id', user.id)
-            .eq('streaming_platforms.slug', 'spotify')
-          
-          console.log('✅ Token Spotify refreshé avec succès')
-          return await makeRequest(newAccessToken)
         }
         throw error
       }
@@ -265,6 +274,17 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('❌ Error in POST /api/user/artists/sync:', error)
+    
+    // Gestion spéciale pour les tokens révoqués
+    if (error.message === 'SPOTIFY_TOKEN_REVOKED') {
+      return NextResponse.json({
+        success: false,
+        error: 'SPOTIFY_TOKEN_REVOKED',
+        message: 'Votre connexion Spotify a été révoquée. Veuillez vous reconnecter.',
+        action_required: 'reconnect_spotify'
+      }, { status: 401 })
+    }
+    
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

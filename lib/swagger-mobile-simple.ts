@@ -401,6 +401,31 @@ const spec = {
                 }
               }
             }
+          },
+          401: {
+            description: 'Non autorisé ou connexion révoquée',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Token manquant',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
+                    }
+                  },
+                  spotify_revoked: {
+                    summary: 'Connexion Spotify révoquée',
+                    value: {
+                      success: false,
+                      error: 'SPOTIFY_TOKEN_REVOKED',
+                      message: 'Votre connexion Spotify a été révoquée. Veuillez vous reconnecter.',
+                      action_required: 'reconnect_spotify'
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -732,7 +757,7 @@ const spec = {
             }
           },
           401: {
-            description: 'Non autorisé',
+            description: 'Non autorisé ou connexion révoquée',
             content: {
               'application/json': {
                 examples: {
@@ -741,6 +766,15 @@ const spec = {
                     value: {
                       success: false,
                       error: 'Authorization header required'
+                    }
+                  },
+                  spotify_revoked: {
+                    summary: 'Connexion Spotify révoquée',
+                    value: {
+                      success: false,
+                      error: 'SPOTIFY_TOKEN_REVOKED',
+                      message: 'Votre connexion Spotify a été révoquée. Veuillez vous reconnecter.',
+                      action_required: 'reconnect_spotify'
                     }
                   }
                 }

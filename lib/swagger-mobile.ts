@@ -1944,8 +1944,10 @@ curl -X POST https://dibs-poc0.vercel.app/api/auth/refresh \\
       '/api/auth/ws-complete': {
         get: {
           tags: ['Auth'],
-          summary: '🚀 P0 - WebSocket COMPLET (Magic Link + Token automatique)',
-          description: `**CRITIQUE** - WebSocket tout-en-un : envoie le Magic Link ET renvoie le token automatiquement !
+          summary: '🚀 P0 - WebSocket Magic Link + Token',
+          description: `WebSocket qui envoie le Magic Link et renvoie le token automatiquement.
+
+**AUTHENTIFICATION REQUISE : NON**
 
 ## 🔐 **AUTHENTIFICATION REQUISE : NON** 
 ❌ **Pas d'authentification nécessaire** - Ce WebSocket sert justement à obtenir le token d'authentification !
