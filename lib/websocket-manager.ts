@@ -21,14 +21,17 @@ export function sendToWebSocket(email: string, data: any): boolean {
       
       // Si c'est un message d'authentification réussie, fermer la connexion après un délai
       if (data.status === 'authenticated') {
+        console.log('🔐 Message d\'authentification envoyé, fermeture programmée dans 3 secondes pour:', email)
         setTimeout(() => {
           try {
+            console.log('🔒 Fermeture du WebSocket après authentification pour:', email)
             controller.close()
             unregisterWebSocketConnection(email)
+            console.log('✅ WebSocket fermé avec succès pour:', email)
           } catch (error) {
-            console.log('Connexion déjà fermée pour:', email)
+            console.log('⚠️ Connexion déjà fermée pour:', email, error)
           }
-        }, 2000)
+        }, 3000) // Augmenté à 3 secondes pour laisser plus de temps au client
       }
       
       return true

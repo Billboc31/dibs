@@ -189,9 +189,11 @@ export async function GET(request: NextRequest) {
                 })
 
                 // Fermer le WebSocket après succès
+                console.log('🔐 Authentification réussie via onAuthStateChange, fermeture programmée dans 3 secondes')
                 setTimeout(() => {
+                  console.log('🔒 Fermeture du WebSocket après authentification onAuthStateChange')
                   closeWebSocketWithCleanup('Authentification réussie via onAuthStateChange')
-                }, 2000)
+                }, 3000) // Augmenté à 3 secondes
               }
 
               // Nettoyer le listener
