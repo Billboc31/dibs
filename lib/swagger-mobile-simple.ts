@@ -320,11 +320,11 @@ const spec = {
     '/api/user/artists': {
       get: {
         tags: ['Artists'],
-        summary: '🎵 Liste des artistes disponibles (toutes plateformes)',
+        summary: '🎵 Liste des artistes disponibles (triés par popularité)',
         'x-priority': 'P0',
         'x-auth': true,
         security: [{ BearerAuth: [] }],
-        description: 'Retourne TOUS les artistes disponibles pour l\'utilisateur sur toutes ses plateformes connectées. Chaque artiste indique s\'il est sélectionné (dans user_artists) ou non. Utilisé pour l\'interface de listing mobile.',
+        description: 'Retourne TOUS les artistes disponibles pour l\'utilisateur sur toutes ses plateformes connectées. **NOUVEAU**: Les artistes sont automatiquement triés par score de fanitude calculé en temps réel (basé sur top artists, écoutes récentes, artistes suivis). Le score est inclus dans la réponse pour affichage mobile. Chaque artiste indique s\'il est sélectionné ou non.',
         parameters: [
           {
             name: 'page',
@@ -350,7 +350,7 @@ const spec = {
               'application/json': {
                 examples: {
                   success: {
-                    summary: 'Artistes avec sélection',
+                    summary: 'Artistes triés par popularité temps réel',
                     value: {
                       success: true,
                       data: {
@@ -362,7 +362,8 @@ const spec = {
                             apple_music_id: null,
                             deezer_id: null,
                             image_url: 'https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647',
-                            selected: true
+                            selected: true,
+                            fanitude_score: 185
                           },
                           {
                             id: '550e8400-e29b-41d4-a716-446655440011',
@@ -371,7 +372,8 @@ const spec = {
                             apple_music_id: null,
                             deezer_id: null,
                             image_url: 'https://i.scdn.co/image/ab6761610000e5eb12a2ef08d00dd7451a6dbed6',
-                            selected: false
+                            selected: false,
+                            fanitude_score: 92
                           },
                           {
                             id: '550e8400-e29b-41d4-a716-446655440012',
@@ -380,7 +382,8 @@ const spec = {
                             apple_music_id: null,
                             deezer_id: null,
                             image_url: 'https://i.scdn.co/image/ab6761610000e5eb4f7b3c6ac5a7e9c6b2c5f1a2',
-                            selected: true
+                            selected: true,
+                            fanitude_score: 67
                           }
                         ],
                         pagination: {
@@ -393,8 +396,8 @@ const spec = {
                           total_artists: 186,
                           selected_artists: 23,
                           displayed_artists: 3
-                        }
-
+                        },
+                        note: "🎯 Artistes triés par score de fanitude temps réel. Score inclus pour affichage mobile (basé sur: top artists + écoutes récentes + suivis)."
                       }
                     }
                   }

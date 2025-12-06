@@ -2,6 +2,129 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { refreshSpotifyToken, disconnectRevokedSpotifyUser } from '@/lib/spotify-api'
 
+// Helper function pour calculer le score de fanitude à la volée (sans stocker)
+async function calculateLiveFanitudeScore(artistSpotifyId: string, accessToken: string, refreshToken?: string, userId?: string): Promise<number> {
+  try {
+    let totalMinutes = 0
+
+    // 1. Vérifier si l'artiste est dans les top artists
+    const timeRanges = ['short_term', 'medium_term', 'long_term']
+    for (const timeRange of timeRanges) {
+      try {
+        const topResponse = await fetch(
+          `https://api.spotify.com/v1/me/top/artists?time_range=${timeRange}&limit=50`,
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        )
+        
+        // Gérer les erreurs 401 (token expiré)
+        if (topResponse.status === 401) {
+          throw new Error('TOKEN_EXPIRED')
+        }
+        
+        if (topResponse.ok) {
+          const topData = await topResponse.json()
+          const artistPosition = topData.items?.findIndex((a: any) => a.id === artistSpotifyId)
+          
+          if (artistPosition !== -1) {
+            // Plus l'artiste est haut dans le top, plus il a de points
+            // Position 0 = 50 points, Position 49 = 1 point
+            const positionBonus = Math.max(50 - artistPosition, 1)
+            totalMinutes += positionBonus * 10 // 10 minutes par point de position
+          }
+        }
+      } catch (error) {
+        console.log(`⚠️ Erreur top artists ${timeRange}:`, error)
+      }
+    }
+
+    // 2. Vérifier les pistes récemment jouées
+      try {
+        const recentResponse = await fetch(
+          'https://api.spotify.com/v1/me/player/recently-played?limit=50',
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        )
+        
+        if (recentResponse.status === 401) {
+          throw new Error('TOKEN_EXPIRED')
+        }
+        
+        if (recentResponse.ok) {
+        const recentData = await recentResponse.json()
+        const artistTracks = recentData.items?.filter((item: any) => 
+          item.track?.artists?.some((artist: any) => artist.id === artistSpotifyId)
+        ) || []
+        
+        // Chaque écoute récente = 3 minutes
+        totalMinutes += artistTracks.length * 3
+      }
+    } catch (error) {
+      console.log('⚠️ Erreur recently played:', error)
+    }
+
+    // 3. Vérifier si l'artiste est suivi
+      try {
+        const followResponse = await fetch(
+          `https://api.spotify.com/v1/me/following/contains?type=artist&ids=${artistSpotifyId}`,
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        )
+        
+        if (followResponse.status === 401) {
+          throw new Error('TOKEN_EXPIRED')
+        }
+        
+        if (followResponse.ok) {
+        const followData = await followResponse.json()
+        if (followData[0] === true) {
+          totalMinutes += 20 // Bonus de 20 minutes pour les artistes suivis
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Erreur follow check:', error)
+    }
+
+    return totalMinutes
+  } catch (error: any) {
+    // Gérer les tokens expirés avec refresh automatique
+    if (error.message === 'TOKEN_EXPIRED' && refreshToken && userId) {
+      console.log(`🔄 Token expiré pour calcul fanitude ${artistSpotifyId}, refresh en cours...`)
+      
+      try {
+        const newAccessToken = await refreshSpotifyToken(refreshToken)
+        if (!newAccessToken) {
+          throw new Error('Failed to refresh Spotify token')
+        }
+        
+        // Mettre à jour le token dans la base
+        await supabaseAdmin
+          .from('user_streaming_platforms')
+          .update({ access_token: newAccessToken })
+          .eq('user_id', userId)
+          .eq('platform_id', (await supabaseAdmin
+            .from('streaming_platforms')
+            .select('id')
+            .eq('slug', 'spotify')
+            .single()
+          ).data?.id)
+        
+        console.log('✅ Token refreshé, nouveau calcul fanitude...')
+        
+        // Retry avec le nouveau token (sans refresh pour éviter la récursion)
+        return await calculateLiveFanitudeScore(artistSpotifyId, newAccessToken)
+      } catch (refreshError: any) {
+        if (refreshError.message === 'SPOTIFY_TOKEN_REVOKED') {
+          console.log('🚨 Token Spotify révoqué pendant calcul fanitude')
+          await disconnectRevokedSpotifyUser(userId)
+          throw new Error('SPOTIFY_TOKEN_REVOKED')
+        }
+        throw refreshError
+      }
+    }
+    
+    console.log(`⚠️ Erreur calcul fanitude pour ${artistSpotifyId}:`, error)
+    return 0
+  }
+}
+
 // Helper function to make Spotify API calls with automatic token refresh
 async function fetchSpotifyWithRefresh(url: string, accessToken: string, refreshToken: string, userId: string): Promise<any> {
   const makeRequest = async (token: string) => {
@@ -343,7 +466,7 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Récupérer les artistes de l'utilisateur avec pagination
+    // Récupérer TOUS les artistes de l'utilisateur (sans pagination d'abord)
     const { data: allArtists, error: artistsError } = await supabaseAdmin
       .from('artists')
       .select(`
@@ -357,7 +480,6 @@ export async function GET(request: NextRequest) {
       `)
       .in('id', userSpecificArtistIds)
       .order('name')
-      .range(offset, offset + limit - 1)
 
     if (artistsError) {
       console.error('❌ Error fetching artists:', artistsError)
@@ -379,7 +501,7 @@ export async function GET(request: NextRequest) {
     )
 
     // Combiner les données : tous les artistes + flag de sélection SEULEMENT
-    const artists = allArtists?.map(artist => {
+    let artists = allArtists?.map(artist => {
       const userArtist = selectedArtistsMap.get(artist.id)
       return {
         id: artist.id,
@@ -388,22 +510,76 @@ export async function GET(request: NextRequest) {
         apple_music_id: artist.apple_music_id,
         deezer_id: artist.deezer_id,
         image_url: artist.image_url,
-        selected: !!userArtist
+        selected: !!userArtist,
+        live_fanitude_score: 0 // Score calculé à la volée, pas stocké
       }
     }) || []
 
-    // Calculer les statistiques avec les artistes spécifiques à l'utilisateur
-    const totalUserArtists = userSpecificArtistIds.length
+    // Récupérer la connexion Spotify pour le calcul des scores
+    const spotifyConnection = connectedPlatforms?.find(p => (p.streaming_platforms as any).slug === 'spotify')
+    
+    // Calculer les scores de fanitude à la volée pour le tri (si connexion Spotify)
+    if (spotifyConnection && artists.length > 0) {
+      console.log('🔄 Calcul des scores de fanitude à la volée pour le tri...')
+      
+      try {
+        const artistsWithScores = await Promise.all(
+          artists.map(async (artist) => {
+            if (artist.spotify_id) {
+              try {
+                const score = await calculateLiveFanitudeScore(
+                  artist.spotify_id, 
+                  spotifyConnection.access_token, 
+                  spotifyConnection.refresh_token, 
+                  user.id
+                )
+                return { ...artist, live_fanitude_score: score }
+              } catch (error) {
+                console.log(`⚠️ Erreur calcul score pour ${artist.name}:`, error)
+                return artist
+              }
+            }
+            return artist
+          })
+        )
+
+        // Trier par score de fanitude décroissant (les plus écoutés en premier)
+        artists = artistsWithScores.sort((a, b) => b.live_fanitude_score - a.live_fanitude_score)
+        
+        console.log(`✅ Scores calculés et triés (top 3: ${artists.slice(0, 3).map(a => `${a.name}:${a.live_fanitude_score}`).join(', ')})`)
+      } catch (error: any) {
+        console.log('⚠️ Erreur lors du calcul des scores de fanitude:', error)
+        
+        // Si c'est une révocation, on propage l'erreur
+        if (error.message === 'SPOTIFY_TOKEN_REVOKED') {
+          throw error
+        }
+        
+        // Sinon, on continue avec le tri par nom (fallback)
+        console.log('📝 Fallback: tri par nom alphabétique')
+        artists = artists.sort((a, b) => a.name.localeCompare(b.name))
+      }
+    }
+
+    // Appliquer la pagination APRÈS le tri par score de fanitude
+    const totalUserArtists = artists.length
+    const paginatedArtists = artists.slice(offset, offset + limit)
     const hasMore = totalUserArtists > offset + limit
     const selectedCount = artists.filter(a => a.selected).length
 
-    console.log(`✅ Fetched ${artists?.length || 0} artists for user ${user.id} (page ${page})`)
+    // Inclure le score de fanitude dans les résultats (renommé pour l'API)
+    const finalArtists = paginatedArtists.map(({ live_fanitude_score, ...artist }) => ({
+      ...artist,
+      fanitude_score: live_fanitude_score || 0 // Score calculé en temps réel
+    }))
+
+    console.log(`✅ Fetched ${paginatedArtists?.length || 0} artists for user ${user.id} (page ${page})`)
     console.log(`📊 Total artistes utilisateur: ${totalUserArtists}, Sélectionnés: ${selectedCount}`)
     
     return NextResponse.json({
       success: true,
       data: {
-        artists: artists || [],
+        artists: finalArtists || [],
         pagination: {
           page,
           limit,
@@ -413,7 +589,7 @@ export async function GET(request: NextRequest) {
         stats: {
           total_artists: totalUserArtists,
           selected_artists: selectedCount,
-          displayed_artists: artists?.length || 0
+          displayed_artists: finalArtists?.length || 0
         }
       }
     })
