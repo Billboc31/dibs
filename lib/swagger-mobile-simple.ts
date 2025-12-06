@@ -789,6 +789,94 @@ const spec = {
     },
 
     // === PLATFORMS ===
+    '/api/user/platforms/disconnect': {
+      post: {
+        tags: ['Platforms'],
+        summary: '🔌 Déconnecter une plateforme',
+        'x-priority': 'P1',
+        'x-auth': true,
+        security: [{ BearerAuth: [] }],
+        description: 'Déconnecte une plateforme de streaming (ex: après révocation token). Permet la reconnexion via /connect-platform.',
+        requestBody: {
+          content: {
+            'application/json': {
+              examples: {
+                disconnect_spotify: {
+                  summary: 'Déconnecter Spotify',
+                  value: {
+                    platform_slug: 'spotify'
+                  }
+                },
+                disconnect_apple: {
+                  summary: 'Déconnecter Apple Music',
+                  value: {
+                    platform_slug: 'apple_music'
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Plateforme déconnectée',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Déconnexion réussie',
+                    value: {
+                      success: true,
+                      data: {
+                        message: 'Spotify déconnecté avec succès',
+                        platform: {
+                          slug: 'spotify',
+                          name: 'Spotify'
+                        },
+                        action_available: 'reconnect_via_connect_platform'
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Non autorisé',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Token manquant',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          404: {
+            description: 'Plateforme non trouvée',
+            content: {
+              'application/json': {
+                examples: {
+                  not_found: {
+                    summary: 'Plateforme inexistante',
+                    value: {
+                      success: false,
+                      error: 'Plateforme \'invalid_platform\' non trouvée'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
     '/api/platforms': {
       get: {
         tags: ['Platforms'],

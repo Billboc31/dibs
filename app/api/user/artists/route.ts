@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { refreshSpotifyToken, disconnectRevokedSpotifyUser } from '@/lib/spotify-api'
+import { artistsCache } from '@/lib/artists-cache'
 
 // Helper function pour calculer le score de fanitude à la volée (sans stocker)
 async function calculateLiveFanitudeScore(artistSpotifyId: string, accessToken: string, refreshToken?: string, userId?: string): Promise<number> {
@@ -189,6 +190,11 @@ async function fetchSpotifyWithRefresh(url: string, accessToken: string, refresh
 
 // GET /api/user/artists - Liste des artistes suivis (paginée)
 export async function GET(request: NextRequest) {
+  // Déclarer les variables au niveau supérieur pour les utiliser dans catch
+  let user: any = null
+  let page = 0
+  let limit = 10
+  
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -199,22 +205,40 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+    const { data: { user: authUser }, error: authError } = await supabaseAdmin.auth.getUser(token)
     
-    if (authError || !user) {
+    if (authError || !authUser) {
       return NextResponse.json(
         { success: false, error: 'Invalid or expired token' },
         { status: 401 }
       )
     }
 
+    user = authUser
+
     // Récupérer les paramètres de pagination
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '0')
-    const limit = parseInt(searchParams.get('limit') || '10')
+    page = parseInt(searchParams.get('page') || '0')
+    limit = parseInt(searchParams.get('limit') || '10')
     const offset = page * limit
 
     console.log(`🔍 Recherche artistes pour user: ${user.id}`)
+
+    // Vérifier le cache d'abord
+    const cachedResult = artistsCache.get(user.id, page, limit)
+    if (cachedResult) {
+      if (cachedResult.isStale) {
+        console.log('⚠️ Utilisation du cache périmé (Spotify potentiellement inaccessible)')
+      }
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...cachedResult.data,
+          cached: true,
+          cache_status: cachedResult.isStale ? 'stale' : 'fresh'
+        }
+      })
+    }
 
     // Récupérer toutes les plateformes connectées par l'utilisateur
     const { data: connectedPlatforms } = await supabaseAdmin
@@ -561,36 +585,30 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Appliquer la pagination APRÈS le tri par score de fanitude
-    const totalUserArtists = artists.length
-    const paginatedArtists = artists.slice(offset, offset + limit)
-    const hasMore = totalUserArtists > offset + limit
-    const selectedCount = artists.filter(a => a.selected).length
-
-    // Inclure le score de fanitude dans les résultats (renommé pour l'API)
-    const finalArtists = paginatedArtists.map(({ live_fanitude_score, ...artist }) => ({
+    // Préparer TOUS les artistes avec leurs scores pour le cache
+    const finalArtists = artists.map(({ live_fanitude_score, ...artist }) => ({
       ...artist,
       fanitude_score: live_fanitude_score || 0 // Score calculé en temps réel
     }))
 
-    console.log(`✅ Fetched ${paginatedArtists?.length || 0} artists for user ${user.id} (page ${page})`)
-    console.log(`📊 Total artistes utilisateur: ${totalUserArtists}, Sélectionnés: ${selectedCount}`)
+    console.log(`✅ Calculé ${finalArtists.length} artistes pour user ${user.id}`)
+    
+    // Mettre en cache TOUS les artistes triés
+    artistsCache.set(user.id, finalArtists)
+    
+    // Récupérer les données paginées depuis le cache (qui vient d'être mis à jour)
+    const cachedPaginatedResult = artistsCache.get(user.id, page, limit)
+    
+    if (!cachedPaginatedResult) {
+      throw new Error('Erreur interne: impossible de récupérer les données du cache')
+    }
     
     return NextResponse.json({
       success: true,
       data: {
-        artists: finalArtists || [],
-        pagination: {
-          page,
-          limit,
-          total: totalUserArtists,
-          hasMore
-        },
-        stats: {
-          total_artists: totalUserArtists,
-          selected_artists: selectedCount,
-          displayed_artists: finalArtists?.length || 0
-        }
+        ...cachedPaginatedResult.data,
+        cached: false,
+        cache_status: 'fresh'
       }
     })
   } catch (error: any) {
@@ -598,6 +616,27 @@ export async function GET(request: NextRequest) {
     
     // Gestion spéciale pour les tokens révoqués
     if (error.message === 'SPOTIFY_TOKEN_REVOKED') {
+      // Essayer de récupérer les données du cache comme fallback
+      const cachedFallback = artistsCache.get(user.id, page, limit)
+      
+      if (cachedFallback) {
+        console.log('🛡️ Token révoqué, utilisation du cache comme fallback')
+        
+        // Marquer le cache comme périmé pour les prochains appels
+        artistsCache.markAsStale(user.id)
+        
+        return NextResponse.json({
+          success: true,
+          data: {
+            ...cachedFallback.data,
+            cached: true,
+            cache_status: 'fallback_revoked',
+            warning: 'Données du cache utilisées. Reconnectez-vous à Spotify pour des données fraîches.'
+          }
+        })
+      }
+      
+      // Pas de cache disponible, retourner l'erreur de révocation
       return NextResponse.json({
         success: false,
         error: 'SPOTIFY_TOKEN_REVOKED',

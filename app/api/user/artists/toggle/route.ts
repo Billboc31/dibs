@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { artistsCache } from '@/lib/artists-cache'
 
 // POST /api/user/artists/toggle - Sélectionner/désélectionner un ou plusieurs artistes
 export async function POST(request: NextRequest) {
@@ -169,6 +170,10 @@ export async function POST(request: NextRequest) {
       .from('user_artists')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
+
+    // Invalider le cache utilisateur car les sélections ont changé
+    artistsCache.invalidateUser(user.id)
+    console.log('🗑️ Cache utilisateur invalidé après toggle artistes')
 
     return NextResponse.json({
       success: true,
