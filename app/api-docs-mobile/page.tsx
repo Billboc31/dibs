@@ -27,6 +27,7 @@ export default function ApiDocsMobilePage() {
   const [testResult, setTestResult] = useState<any>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [showOAuthDocs, setShowOAuthDocs] = useState(false)
+  const [headerCollapsed, setHeaderCollapsed] = useState(false)
   
   // États pour le WebSocket Magic Link
   const [wsEmail, setWsEmail] = useState('')
@@ -512,101 +513,140 @@ export default function ApiDocsMobilePage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">📱 API Mobile DIBS</h1>
-              <p className="text-gray-600">Documentation complète pour l'application mobile</p>
+              {!headerCollapsed && (
+                <p className="text-gray-600">Documentation complète pour l'application mobile</p>
+              )}
             </div>
-            <div className="text-sm text-gray-500">
-              Serveur: {spec.servers?.[0]?.url || 'N/A'}
+            <div className="flex items-center gap-3">
+              {!headerCollapsed && (
+                <div className="text-sm text-gray-500">
+                  Serveur: {spec.servers?.[0]?.url || 'N/A'}
+                </div>
+              )}
+              <button
+                onClick={() => setHeaderCollapsed(!headerCollapsed)}
+                className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-md transition-colors"
+                title={headerCollapsed ? "Développer l'en-tête" : "Réduire l'en-tête"}
+              >
+                {headerCollapsed ? '▼ Développer' : '▲ Réduire'}
+              </button>
             </div>
           </div>
 
-          {/* Token Bearer Global */}
-          <div className="bg-blue-50 p-4 rounded-lg mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="font-medium text-blue-900">🔑 Token Bearer Global</span>
-              <button
-                onClick={testTokenValidity}
-                disabled={!testToken}
-                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                🧪 Tester
-              </button>
+          {/* Token Bearer Global - Version compacte si collapsed */}
+          {headerCollapsed ? (
+            <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="flex gap-2 items-center">
+                <span className="text-xs text-blue-900 font-medium whitespace-nowrap">🔑 Token:</span>
+                <input
+                  type="text"
+                  placeholder="Coller votre token Bearer ici..."
+                  value={testToken}
+                  onChange={(e) => handleTokenChange(e.target.value)}
+                  className="flex-1 px-2 py-1 border rounded-md text-xs"
+                />
+                <button
+                  onClick={testTokenValidity}
+                  disabled={!testToken}
+                  className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                >
+                  🧪
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                placeholder="Coller votre token Bearer ici..."
-                value={testToken}
-                onChange={(e) => handleTokenChange(e.target.value)}
-                className="flex-1 px-3 py-2 border rounded-md text-sm"
-              />
-              <button
-                onClick={setExampleToken}
-                className="px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
-              >
-                Exemple
-              </button>
-              <button
-                onClick={clearToken}
-                className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-              >
-                Effacer
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="forceToken"
-                checked={localStorage.getItem('dibs_force_token') === 'true'}
-                onChange={(e) => {
-                  localStorage.setItem('dibs_force_token', e.target.checked.toString())
-                }}
-                className="rounded"
-              />
-              <label htmlFor="forceToken" className="text-sm text-blue-800">
-                🔧 Forcer l'ajout du token à TOUS les endpoints
-              </label>
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* Token Bearer Global - Version complète */}
+              <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-medium text-blue-900">🔑 Token Bearer Global</span>
+                  <button
+                    onClick={testTokenValidity}
+                    disabled={!testToken}
+                    className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    🧪 Tester
+                  </button>
+                </div>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    placeholder="Coller votre token Bearer ici..."
+                    value={testToken}
+                    onChange={(e) => handleTokenChange(e.target.value)}
+                    className="flex-1 px-3 py-2 border rounded-md text-sm"
+                  />
+                  <button
+                    onClick={setExampleToken}
+                    className="px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                  >
+                    Exemple
+                  </button>
+                  <button
+                    onClick={clearToken}
+                    className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                  >
+                    Effacer
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="forceToken"
+                    checked={localStorage.getItem('dibs_force_token') === 'true'}
+                    onChange={(e) => {
+                      localStorage.setItem('dibs_force_token', e.target.checked.toString())
+                    }}
+                    className="rounded"
+                  />
+                  <label htmlFor="forceToken" className="text-sm text-blue-800">
+                    🔧 Forcer l'ajout du token à TOUS les endpoints
+                  </label>
+                </div>
+              </div>
 
-          {/* Information sur les révocations */}
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-            <h3 className="font-semibold text-orange-800 mb-2">🚨 Gestion des tokens révoqués</h3>
-            <div className="text-sm text-orange-700 space-y-2">
-              <p><strong>En mode développement</strong>, Spotify révoque fréquemment les tokens (max 25 utilisateurs).</p>
-              <p><strong>Si vous recevez :</strong> <code className="bg-orange-100 px-1 rounded">SPOTIFY_TOKEN_REVOKED</code></p>
-              <p><strong>Action :</strong> Reconnectez-vous à Spotify via <code>/connect-platform</code></p>
-              <p><strong>En production :</strong> Les révocations seront beaucoup plus rares.</p>
-            </div>
-          </div>
+              {/* Information sur les révocations */}
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <h3 className="font-semibold text-orange-800 mb-2">🚨 Gestion des tokens révoqués</h3>
+                <div className="text-sm text-orange-700 space-y-2">
+                  <p><strong>En mode développement</strong>, Spotify révoque fréquemment les tokens (max 25 utilisateurs).</p>
+                  <p><strong>Si vous recevez :</strong> <code className="bg-orange-100 px-1 rounded">SPOTIFY_TOKEN_REVOKED</code></p>
+                  <p><strong>Action :</strong> Reconnectez-vous à Spotify via <code>/connect-platform</code></p>
+                  <p><strong>En production :</strong> Les révocations seront beaucoup plus rares.</p>
+                </div>
+              </div>
 
-          {/* Filtres */}
-          <div className="flex gap-4 items-center">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="🔍 Rechercher un endpoint..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg"
-              />
-            </div>
-            <select
-              value={selectedTag}
-              onChange={(e) => setSelectedTag(e.target.value)}
-              className="px-4 py-2 border rounded-lg"
-            >
-              <option value="all">Tous les tags</option>
-              {tags.map(tag => (
-                <option key={tag} value={tag}>{tag}</option>
-              ))}
-            </select>
-          </div>
+              {/* Filtres */}
+              <div className="flex gap-4 items-center">
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    placeholder="🔍 Rechercher un endpoint..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg"
+                  />
+                </div>
+                <select
+                  value={selectedTag}
+                  onChange={(e) => setSelectedTag(e.target.value)}
+                  className="px-4 py-2 border rounded-lg"
+                >
+                  <option value="all">Tous les tags</option>
+                  {tags.map(tag => (
+                    <option key={tag} value={tag}>{tag}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* Contenu principal */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Guide d'authentification */}
+        {!headerCollapsed && (
         <div className="bg-white rounded-lg shadow-sm border mb-6 p-6">
           <h2 className="text-xl font-bold mb-4">🔐 Guide d'authentification</h2>
           <div className="prose max-w-none">
@@ -647,6 +687,7 @@ export default function ApiDocsMobilePage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Liste des endpoints */}
         <div className="space-y-4">
