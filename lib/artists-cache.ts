@@ -96,6 +96,20 @@ class ArtistsCache {
   }
 
   /**
+   * Récupère toutes les données du cache sans pagination (pour récupérer les anciens scores)
+   */
+  getFullCache(userId: string): any[] | null {
+    const key = this.generateKey(userId)
+    const entry = this.cache.get(key)
+
+    if (!entry) {
+      return null
+    }
+
+    return entry.data.all_artists || []
+  }
+
+  /**
    * Stocke TOUS les artistes triés dans le cache (pas de pagination)
    */
   set(userId: string, allArtists: any[]): void {

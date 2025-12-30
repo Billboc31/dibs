@@ -240,6 +240,19 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Récupérer l'ancien cache complet pour préserver les scores en cas d'erreur
+    const oldCachedData = artistsCache.getFullCache(user.id)
+    const oldScoresMap = new Map<string, number>()
+    
+    if (oldCachedData && Array.isArray(oldCachedData)) {
+      oldCachedData.forEach((artist: any) => {
+        if (artist.id && artist.fanitude_score !== undefined) {
+          oldScoresMap.set(artist.id, artist.fanitude_score)
+        }
+      })
+      console.log(`📦 Anciens scores récupérés du cache: ${oldScoresMap.size} artistes`)
+    }
+
     // Récupérer toutes les plateformes connectées par l'utilisateur
     const { data: connectedPlatforms } = await supabaseAdmin
       .from('user_streaming_platforms')
@@ -524,9 +537,10 @@ export async function GET(request: NextRequest) {
       selectedArtists?.map(ua => [ua.artist_id, ua]) || []
     )
 
-    // Combiner les données : tous les artistes + flag de sélection SEULEMENT
+    // Combiner les données : tous les artistes + flag de sélection + anciens scores
     let artists = allArtists?.map(artist => {
       const userArtist = selectedArtistsMap.get(artist.id)
+      const oldScore = oldScoresMap.get(artist.id) || 0 // Récupérer l'ancien score du cache
       return {
         id: artist.id,
         name: artist.name,
@@ -535,7 +549,7 @@ export async function GET(request: NextRequest) {
         deezer_id: artist.deezer_id,
         image_url: artist.image_url,
         selected: !!userArtist,
-        live_fanitude_score: 0 // Score calculé à la volée, pas stocké
+        live_fanitude_score: oldScore // Initialiser avec l'ancien score, sera recalculé si possible
       }
     }) || []
 
@@ -579,9 +593,9 @@ export async function GET(request: NextRequest) {
           throw error
         }
         
-        // Sinon, on continue avec le tri par nom (fallback)
-        console.log('📝 Fallback: tri par nom alphabétique')
-        artists = artists.sort((a, b) => a.name.localeCompare(b.name))
+        // Sinon, on continue avec le tri par fanitude (même avec des scores à 0)
+        console.log('📝 Fallback: tri par score de fanitude (scores potentiellement à 0)')
+        artists = artists.sort((a, b) => (b.live_fanitude_score || 0) - (a.live_fanitude_score || 0))
       }
     }
 
