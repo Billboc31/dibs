@@ -503,6 +503,47 @@ export async function GET(request: NextRequest) {
 
     console.log(`📊 Total artistes spécifiques à l'utilisateur: ${userSpecificArtistIds.length}`)
 
+    // Nettoyer user_artists : supprimer les artistes qui ne sont plus dans Spotify
+    try {
+      // Récupérer les artistes actuellement sélectionnés par l'utilisateur
+      const { data: selectedUserArtists } = await supabaseAdmin
+        .from('user_artists')
+        .select('artist_id, artists!inner(id, name, spotify_id)')
+        .eq('user_id', user.id)
+      
+      if (selectedUserArtists && selectedUserArtists.length > 0) {
+        // Créer un Set des IDs d'artistes encore dans Spotify
+        const spotifyArtistIdsSet = new Set(userSpecificArtistIds)
+        
+        // Trouver les artistes à supprimer (ceux dans user_artists mais plus dans Spotify)
+        const artistsToRemove = selectedUserArtists.filter(ua => 
+          !spotifyArtistIdsSet.has(ua.artist_id)
+        )
+        
+        if (artistsToRemove.length > 0) {
+          console.log(`🧹 Nettoyage: ${artistsToRemove.length} artistes ne sont plus dans votre écoute Spotify`)
+          
+          // Supprimer ces artistes de user_artists
+          const artistIdsToRemove = artistsToRemove.map(ua => ua.artist_id)
+          const { error: deleteError } = await supabaseAdmin
+            .from('user_artists')
+            .delete()
+            .eq('user_id', user.id)
+            .in('artist_id', artistIdsToRemove)
+          
+          if (deleteError) {
+            console.error('❌ Erreur lors du nettoyage des artistes:', deleteError)
+          } else {
+            console.log(`✅ ${artistsToRemove.length} artistes supprimés: ${artistsToRemove.map((ua: any) => ua.artists.name).join(', ')}`)
+          }
+        } else {
+          console.log('✅ Tous les artistes sélectionnés sont encore dans votre écoute Spotify')
+        }
+      }
+    } catch (cleanupError) {
+      console.error('⚠️ Erreur lors du nettoyage (non bloquant):', cleanupError)
+    }
+
     if (userSpecificArtistIds.length === 0) {
       console.log('❌ Aucun artiste trouvé pour cet utilisateur')
       
