@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // GET /api/platforms - Liste de toutes les plateformes
 export async function GET(request: NextRequest) {
   try {

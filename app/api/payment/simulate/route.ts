@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // POST /api/payment/simulate - Simuler un paiement (pour les tests)
 export async function POST(request: NextRequest) {
   try {

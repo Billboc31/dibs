@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // GET /api/qr/validate/[code] - Valider un QR code sans le scanner
 export async function GET(
   request: NextRequest,

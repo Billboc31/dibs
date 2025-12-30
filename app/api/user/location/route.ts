@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // PUT /api/user/location - Mettre à jour la localisation
 export async function PUT(request: NextRequest) {
   try {

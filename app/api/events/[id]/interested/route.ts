@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // POST /api/events/[id]/interested - Marquer intéressé par un événement
 export async function POST(
   request: NextRequest,

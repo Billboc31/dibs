@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { artistsCache } from '@/lib/artists-cache'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 /**
  * Retourne les statistiques du cache des artistes
  * Utile pour le monitoring et le debug

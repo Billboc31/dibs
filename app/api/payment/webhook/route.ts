@@ -3,6 +3,10 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { notifyPaymentSuccess, notifyPaymentFailure, notifyPaymentCancelled } from '@/lib/payment-websocket'
 import { verifyWebhookSignature, handleSuccessfulPayment, getCheckoutSession } from '@/lib/stripe'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // POST /api/payment/webhook - Webhook Stripe pour recevoir les notifications de paiement
 export async function POST(request: NextRequest) {
   try {

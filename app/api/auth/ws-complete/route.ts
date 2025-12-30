@@ -2,6 +2,10 @@ import { NextRequest } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { registerWebSocketConnection, unregisterWebSocketConnection } from '@/lib/websocket-manager'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const email = searchParams.get('email')

@@ -2,6 +2,10 @@ import { NextRequest } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { addPaymentConnection, sendPaymentMessage } from '@/lib/payment-websocket'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // GET /api/payment/ws - WebSocket pour écouter les résultats de paiement
 export async function GET(request: NextRequest) {
   try {

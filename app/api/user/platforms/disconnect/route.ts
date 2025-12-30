@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { artistsCache } from '@/lib/artists-cache'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 /**
  * Déconnecte une plateforme de streaming pour l'utilisateur
  * Utilisé notamment quand un token est révoqué pour permettre la reconnexion

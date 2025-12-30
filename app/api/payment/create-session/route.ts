@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createWalletRechargeSession, createStripeCustomer } from '@/lib/stripe'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // POST /api/payment/create-session - Créer une session de paiement Stripe
 export async function POST(request: NextRequest) {
   try {

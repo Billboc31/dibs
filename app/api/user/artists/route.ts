@@ -3,6 +3,9 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { refreshSpotifyToken, disconnectRevokedSpotifyUser } from '@/lib/spotify-api'
 import { artistsCache } from '@/lib/artists-cache'
 
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // Helper function pour calculer le score de fanitude à la volée (sans stocker)
 async function calculateLiveFanitudeScore(artistSpotifyId: string, accessToken: string, refreshToken?: string, userId?: string): Promise<number> {
   try {

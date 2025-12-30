@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { artistsCache } from '@/lib/artists-cache'
 
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // POST /api/user/artists/toggle - Sélectionner/désélectionner un ou plusieurs artistes
 export async function POST(request: NextRequest) {
   try {

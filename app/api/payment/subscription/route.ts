@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createWalletSubscription, cancelSubscription, pauseSubscription, resumeSubscription } from '@/lib/stripe'
 
+
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // POST /api/payment/subscription - Créer un abonnement de recharge automatique
 export async function POST(request: NextRequest) {
   try {

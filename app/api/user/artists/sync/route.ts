@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { refreshSpotifyToken, disconnectRevokedSpotifyUser } from '@/lib/spotify-api'
 
+// Force dynamic rendering pour éviter les erreurs de build Vercel
+export const dynamic = 'force-dynamic'
+
 // POST /api/user/artists/sync - Synchroniser les artistes Spotify vers user_artists
 export async function POST(request: NextRequest) {
   try {
