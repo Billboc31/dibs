@@ -227,17 +227,22 @@ export async function GET(request: NextRequest) {
     // Vérifier le cache d'abord
     const cachedResult = artistsCache.get(user.id, page, limit)
     if (cachedResult) {
-      if (cachedResult.isStale) {
-        console.log('⚠️ Utilisation du cache périmé (Spotify potentiellement inaccessible)')
+      // Si le cache est frais, le retourner directement
+      if (!cachedResult.isStale) {
+        console.log('⚡ Cache frais utilisé')
+        return NextResponse.json({
+          success: true,
+          data: {
+            ...cachedResult.data,
+            cached: true,
+            cache_status: 'fresh'
+          }
+        })
       }
-      return NextResponse.json({
-        success: true,
-        data: {
-          ...cachedResult.data,
-          cached: true,
-          cache_status: cachedResult.isStale ? 'stale' : 'fresh'
-        }
-      })
+      
+      // Si le cache est périmé, on tente de le rafraîchir
+      // Mais on garde le cache périmé en fallback si le refresh échoue
+      console.log('⚠️ Cache périmé détecté, tentative de rafraîchissement...')
     }
 
     // Récupérer l'ancien cache complet pour préserver les scores en cas d'erreur
@@ -497,6 +502,25 @@ export async function GET(request: NextRequest) {
 
     if (userSpecificArtistIds.length === 0) {
       console.log('❌ Aucun artiste trouvé pour cet utilisateur')
+      
+      // Si on a un cache périmé, l'utiliser en fallback
+      const cachedFallback = artistsCache.get(user.id, page, limit)
+      if (cachedFallback) {
+        console.log('🛡️ Utilisation du cache périmé comme fallback (Spotify inaccessible)')
+        artistsCache.markAsStale(user.id)
+        
+        return NextResponse.json({
+          success: true,
+          data: {
+            ...cachedFallback.data,
+            cached: true,
+            cache_status: 'fallback_spotify_error',
+            warning: 'Données du cache utilisées. Spotify temporairement inaccessible.'
+          }
+        })
+      }
+      
+      // Pas de cache disponible, retourner l'erreur
       return NextResponse.json({
         success: false,
         error: 'Impossible de récupérer les artistes Spotify. Vérifiez votre connexion Spotify ou réessayez plus tard.'
@@ -628,29 +652,33 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Error in GET /api/user/artists:', error)
     
-    // Gestion spéciale pour les tokens révoqués
+    // Essayer de récupérer les données du cache comme fallback (en cas d'erreur Spotify)
+    const cachedFallback = artistsCache.get(user.id, page, limit)
+    
+    if (cachedFallback) {
+      console.log('🛡️ Erreur lors du refresh, utilisation du cache comme fallback')
+      
+      // Marquer le cache comme périmé pour les prochains appels
+      artistsCache.markAsStale(user.id)
+      
+      // Déterminer le message approprié selon le type d'erreur
+      const isRevoked = error.message === 'SPOTIFY_TOKEN_REVOKED'
+      
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...cachedFallback.data,
+          cached: true,
+          cache_status: isRevoked ? 'fallback_revoked' : 'fallback_error',
+          warning: isRevoked 
+            ? 'Données du cache utilisées. Reconnectez-vous à Spotify pour des données fraîches.'
+            : 'Données du cache utilisées. Spotify temporairement inaccessible.'
+        }
+      })
+    }
+    
+    // Pas de cache disponible, retourner l'erreur appropriée
     if (error.message === 'SPOTIFY_TOKEN_REVOKED') {
-      // Essayer de récupérer les données du cache comme fallback
-      const cachedFallback = artistsCache.get(user.id, page, limit)
-      
-      if (cachedFallback) {
-        console.log('🛡️ Token révoqué, utilisation du cache comme fallback')
-        
-        // Marquer le cache comme périmé pour les prochains appels
-        artistsCache.markAsStale(user.id)
-        
-        return NextResponse.json({
-          success: true,
-          data: {
-            ...cachedFallback.data,
-            cached: true,
-            cache_status: 'fallback_revoked',
-            warning: 'Données du cache utilisées. Reconnectez-vous à Spotify pour des données fraîches.'
-          }
-        })
-      }
-      
-      // Pas de cache disponible, retourner l'erreur de révocation
       return NextResponse.json({
         success: false,
         error: 'SPOTIFY_TOKEN_REVOKED',
