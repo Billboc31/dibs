@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { refreshSpotifyToken, disconnectRevokedSpotifyUser } from '@/lib/spotify-api'
+import { artistsCache } from '@/lib/artists-cache'
 
 // Force dynamic rendering pour éviter les erreurs de build Vercel
 export const dynamic = 'force-dynamic'
@@ -264,6 +265,10 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ ${updatedArtists.length} artistes synchronisés`)
 
+    // Invalider le cache pour forcer le recalcul avec les nouvelles stats
+    artistsCache.invalidateUser(user.id)
+    console.log('🗑️ Cache utilisateur invalidé après sync')
+
     return NextResponse.json({
       success: true,
       data: {
@@ -271,7 +276,8 @@ export async function POST(request: NextRequest) {
         total_selected: selectedArtists.length,
         updated_artists: updatedArtists.length,
         spotify_connected: !!spotifyConnection,
-        updated_artists_details: updatedArtists
+        updated_artists_details: updatedArtists,
+        cache_invalidated: true
       }
     })
 
