@@ -4,10 +4,7 @@ import { useEffect, useState } from 'react'
 import DibsLogo from '@/components/DibsLogo'
 
 export default function SpotifySuccessPage() {
-  const handleClose = () => {
-    // Rediriger vers la doc mobile plutôt que fermer
-    window.location.href = '/api-docs-mobile'
-  }
+  // Pas de redirection, la page reste affichée
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-green-50 flex items-center justify-center p-6">
@@ -64,14 +61,11 @@ export default function SpotifySuccessPage() {
             <span className="font-semibold">Spotify connecté</span>
           </div>
 
-          {/* Boutons */}
-          <div className="space-y-3">
-            <button
-              onClick={handleClose}
-              className="w-full bg-black text-white py-4 rounded-xl font-bold text-lg hover:bg-gray-800 transition-all transform hover:scale-105 active:scale-95"
-            >
-              Retour à la documentation
-            </button>
+          {/* Message final */}
+          <div className="text-center">
+            <p className="text-gray-500 text-sm">
+              Tu peux fermer cette page et retourner sur l'application mobile
+            </p>
           </div>
         </div>
 
