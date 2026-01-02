@@ -3,17 +3,17 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
+import DibsLogo from '@/components/DibsLogo'
 
 export default function AuthCallback() {
-  const [status, setStatus] = useState('Vérification en cours...')
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
+  const [message, setMessage] = useState('Vérification en cours...')
   const [error, setError] = useState('')
-  const router = useRouter()
   const searchParams = useSearchParams()
 
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
-        // Récupérer les paramètres de l'URL (token_hash, type, etc.)
         const token_hash = searchParams.get('token_hash')
         const type = searchParams.get('type')
         const access_token = searchParams.get('access_token')
@@ -23,8 +23,7 @@ export default function AuthCallback() {
         console.log('Auth callback params:', { token_hash, type, access_token, redirect_to })
 
         if (token_hash && type) {
-          // Vérifier le token Magic Link
-          setStatus('Vérification du Magic Link...')
+          setMessage('Vérification du Magic Link...')
           
           const { data, error } = await supabase.auth.verifyOtp({
             token_hash,
@@ -33,22 +32,17 @@ export default function AuthCallback() {
 
           if (error) {
             console.error('Erreur vérification OTP:', error)
+            setStatus('error')
             setError(`Erreur de vérification: ${error.message}`)
             return
           }
 
           if (data.user && data.session) {
-            setStatus('Authentification réussie ! ✅')
-            
+            setStatus('success')
+            setMessage('Authentification réussie !')
             console.log('✅ Utilisateur authentifié:', data.user.email)
-            console.log('✅ Session créée:', data.session.access_token)
             
-            // Si redirect_to est spécifié, rediriger vers cette URL
             if (redirect_to) {
-              console.log('🔄 Redirection vers:', redirect_to)
-              setStatus('Redirection vers l\'app mobile...')
-              
-              // Ajouter les tokens à l'URL de redirection pour le WebSocket
               const redirectUrl = new URL(redirect_to)
               redirectUrl.searchParams.set('access_token', data.session.access_token)
               redirectUrl.searchParams.set('refresh_token', data.session.refresh_token)
@@ -56,17 +50,11 @@ export default function AuthCallback() {
               setTimeout(() => {
                 window.location.href = redirectUrl.toString()
               }, 1000)
-            } else {
-              // Comportement par défaut
-              setTimeout(() => {
-                setStatus('Vous pouvez fermer cette page et retourner dans l\'app mobile.')
-              }, 2000)
             }
           }
 
         } else if (access_token && refresh_token) {
-          // Si les tokens sont déjà dans l'URL (redirection directe)
-          setStatus('Tokens détectés, authentification en cours...')
+          setMessage('Tokens détectés, authentification en cours...')
           
           const { data, error } = await supabase.auth.setSession({
             access_token,
@@ -75,20 +63,17 @@ export default function AuthCallback() {
 
           if (error) {
             console.error('Erreur setSession:', error)
+            setStatus('error')
             setError(`Erreur de session: ${error.message}`)
             return
           }
 
           if (data.session) {
-            setStatus('Authentification réussie ! ✅')
+            setStatus('success')
+            setMessage('Authentification réussie !')
             console.log('✅ Session établie:', data.session.user?.email)
             
-            // Si redirect_to est spécifié, rediriger vers cette URL
             if (redirect_to) {
-              console.log('🔄 Redirection vers:', redirect_to)
-              setStatus('Redirection vers l\'app mobile...')
-              
-              // Ajouter les tokens à l'URL de redirection pour le WebSocket
               const redirectUrl = new URL(redirect_to)
               redirectUrl.searchParams.set('access_token', data.session.access_token)
               redirectUrl.searchParams.set('refresh_token', data.session.refresh_token)
@@ -96,20 +81,17 @@ export default function AuthCallback() {
               setTimeout(() => {
                 window.location.href = redirectUrl.toString()
               }, 1000)
-            } else {
-              setTimeout(() => {
-                setStatus('Vous pouvez fermer cette page et retourner dans l\'app mobile.')
-              }, 2000)
             }
           }
 
         } else {
-          // Pas de paramètres d'authentification
+          setStatus('error')
           setError('Paramètres d\'authentification manquants dans l\'URL')
         }
 
       } catch (error) {
         console.error('Erreur callback auth:', error)
+        setStatus('error')
         setError(`Erreur inattendue: ${error instanceof Error ? error.message : 'Erreur inconnue'}`)
       }
     }
@@ -118,55 +100,176 @@ export default function AuthCallback() {
   }, [searchParams])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-yellow-400 via-yellow-500 to-orange-500 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
-        <div className="mb-6">
-          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">👑</span>
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-yellow-50 flex items-center justify-center p-6">
+      <div className="max-w-md w-full">
+        <div className="bg-white rounded-3xl shadow-2xl p-8 text-center border border-gray-100">
+          {/* Logo */}
+          <div className="mb-8 flex justify-center">
+            <DibsLogo size="normal" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">DIBS</h1>
-          <p className="text-gray-600">Authentification Magic Link</p>
+
+          {/* Animation/Icône selon le statut */}
+          <div className="mb-8 relative">
+            {status === 'loading' && (
+              <div className="w-32 h-32 mx-auto bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full flex items-center justify-center shadow-lg">
+                <svg className="animate-spin h-12 w-12 text-white" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+            )}
+
+            {status === 'success' && (
+              <>
+                <div className="w-32 h-32 mx-auto bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-lg animate-scale-in">
+                  <svg 
+                    className="w-16 h-16 text-white animate-check-draw" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={3} 
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                </div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-40 h-40 border-4 border-green-200 rounded-full animate-ping-slow opacity-30"></div>
+                </div>
+              </>
+            )}
+
+            {status === 'error' && (
+              <div className="w-32 h-32 mx-auto bg-gradient-to-br from-red-400 to-red-600 rounded-full flex items-center justify-center shadow-lg">
+                <span className="text-6xl text-white">❌</span>
+              </div>
+            )}
+          </div>
+
+          {/* Titre et message */}
+          {status === 'loading' && (
+            <>
+              <h1 className="text-2xl font-bold text-gray-900 mb-4">
+                Authentification en cours
+              </h1>
+              <p className="text-lg text-gray-600 mb-2">
+                {message}
+              </p>
+            </>
+          )}
+
+          {status === 'success' && (
+            <>
+              <h1 className="text-3xl font-bold text-gray-900 mb-4">
+                🎉 Inscription réussie !
+              </h1>
+              <p className="text-lg text-gray-600 mb-2">
+                Ton compte a été créé avec succès.
+              </p>
+              <p className="text-md text-gray-500 mb-8">
+                Tu peux maintenant retourner sur l'application mobile DIBS.
+              </p>
+
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-full mb-8 border border-green-200">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="font-semibold">Compte activé</span>
+              </div>
+
+              {/* Message final */}
+              <div className="text-center">
+                <p className="text-gray-500 text-sm">
+                  Tu peux fermer cette page et retourner sur l'application mobile
+                </p>
+              </div>
+            </>
+          )}
+
+          {status === 'error' && (
+            <>
+              <h1 className="text-2xl font-bold text-red-700 mb-4">
+                Erreur d'authentification
+              </h1>
+              <p className="text-md text-red-600 mb-8">
+                {error}
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-700">
+                  Si le problème persiste, contacte le support.
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
-        {error ? (
-          <div className="mb-6">
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-xl text-red-600">❌</span>
-            </div>
-            <h2 className="text-lg font-semibold text-red-600 mb-2">Erreur</h2>
-            <p className="text-red-500 text-sm">{error}</p>
-          </div>
-        ) : (
-          <div className="mb-6">
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              {status.includes('✅') ? (
-                <span className="text-xl text-green-600">✅</span>
-              ) : (
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-yellow-600"></div>
-              )}
-            </div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-2">
-              {status.includes('✅') ? 'Connexion réussie !' : 'Authentification'}
-            </h2>
-            <p className="text-gray-600 text-sm">{status}</p>
-          </div>
-        )}
-
-        {status.includes('fermer cette page') && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-            <p className="text-yellow-800 text-sm font-medium">
-              📱 Retournez dans l'app mobile DIBS
-            </p>
-            <p className="text-yellow-600 text-xs mt-1">
-              Votre connexion a été détectée automatiquement
+        {/* Instruction supplémentaire */}
+        {status === 'success' && (
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-500">
+              💡 Retourne sur l'app mobile pour continuer
             </p>
           </div>
         )}
-
-        <div className="text-xs text-gray-400 mt-6">
-          Cette page se ferme automatiquement après l'authentification
-        </div>
       </div>
+
+      {/* Styles pour les animations */}
+      <style jsx>{`
+        @keyframes scale-in {
+          0% {
+            transform: scale(0);
+            opacity: 0;
+          }
+          50% {
+            transform: scale(1.1);
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+
+        @keyframes check-draw {
+          0% {
+            stroke-dasharray: 0, 100;
+            opacity: 0;
+          }
+          50% {
+            opacity: 1;
+          }
+          100% {
+            stroke-dasharray: 100, 0;
+            opacity: 1;
+          }
+        }
+
+        @keyframes ping-slow {
+          0% {
+            transform: scale(1);
+            opacity: 0.3;
+          }
+          100% {
+            transform: scale(1.5);
+            opacity: 0;
+          }
+        }
+
+        .animate-scale-in {
+          animation: scale-in 0.6s ease-out;
+        }
+
+        .animate-check-draw {
+          animation: check-draw 0.8s ease-in-out 0.3s both;
+        }
+
+        .animate-ping-slow {
+          animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+      `}</style>
     </div>
   )
 }
