@@ -1,10 +1,12 @@
 {
-  "version": 2,
-  "builds": [
+  "crons": [
     {
-      "src": "package.json",
-      "use": "@vercel/next"
+      "path": "/api/cron/concert-notifications",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/clean-notifications",
+      "schedule": "0 2 * * 0"
     }
-  ],
-  "regions": ["cdg1"]
+  ]
 }
