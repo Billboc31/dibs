@@ -4,27 +4,9 @@ import { useEffect, useState } from 'react'
 import DibsLogo from '@/components/DibsLogo'
 
 export default function SpotifySuccessPage() {
-  const [countdown, setCountdown] = useState(5)
-
-  useEffect(() => {
-    // Compte à rebours pour fermer automatiquement
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer)
-          // Tenter de fermer l'onglet/fenêtre
-          window.close()
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [])
-
   const handleClose = () => {
-    window.close()
+    // Rediriger vers la doc mobile plutôt que fermer
+    window.location.href = '/api-docs-mobile'
   }
 
   return (
@@ -88,12 +70,8 @@ export default function SpotifySuccessPage() {
               onClick={handleClose}
               className="w-full bg-black text-white py-4 rounded-xl font-bold text-lg hover:bg-gray-800 transition-all transform hover:scale-105 active:scale-95"
             >
-              Fermer cette page
+              Retour à la documentation
             </button>
-            
-            <p className="text-sm text-gray-400">
-              Fermeture automatique dans {countdown}s...
-            </p>
           </div>
         </div>
 
