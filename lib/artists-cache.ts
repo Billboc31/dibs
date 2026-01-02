@@ -98,7 +98,7 @@ class ArtistsCache {
   /**
    * Récupère toutes les données du cache sans pagination (pour récupérer les anciens scores)
    */
-  getFullCache(userId: string): any[] | null {
+  getFullCache(userId: string): { artists: any[], cached_at: string, is_stale: boolean } | null {
     const key = this.generateKey(userId)
     const entry = this.cache.get(key)
 
@@ -106,7 +106,14 @@ class ArtistsCache {
       return null
     }
 
-    return entry.data.all_artists || []
+    const now = Date.now()
+    const isExpired = now - entry.timestamp > this.cacheTTL
+
+    return {
+      artists: entry.data.all_artists || [],
+      cached_at: entry.data.cached_at,
+      is_stale: entry.isStale || isExpired
+    }
   }
 
   /**

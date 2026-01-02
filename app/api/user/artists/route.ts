@@ -252,8 +252,8 @@ export async function GET(request: NextRequest) {
     const oldCachedData = artistsCache.getFullCache(user.id)
     const oldScoresMap = new Map<string, number>()
     
-    if (oldCachedData && Array.isArray(oldCachedData)) {
-      oldCachedData.forEach((artist: any) => {
+    if (oldCachedData && oldCachedData.artists) {
+      oldCachedData.artists.forEach((artist: any) => {
         if (artist.id && artist.fanitude_score !== undefined) {
           oldScoresMap.set(artist.id, artist.fanitude_score)
         }
