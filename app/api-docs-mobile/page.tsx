@@ -43,6 +43,12 @@ export default function ApiDocsMobilePage() {
   const [paymentMessages, setPaymentMessages] = useState<Array<{timestamp: string, message: string}>>([])
   const [paymentEventSource, setPaymentEventSource] = useState<EventSource | null>(null)
 
+  // États pour la gestion du cache
+  const [cacheStats, setCacheStats] = useState<any>(null)
+  const [cacheLoading, setCacheLoading] = useState(false)
+  const [cacheResult, setCacheResult] = useState<any>(null)
+  const [clearUserId, setClearUserId] = useState('')
+
   useEffect(() => {
     fetch('/api/docs-mobile')
       .then(res => res.json())
@@ -335,6 +341,107 @@ export default function ApiDocsMobilePage() {
       }
     } catch (error) {
       alert(`❌ Erreur de test du token: ${error}`)
+    }
+  }
+
+  // Récupérer les stats du cache
+  const fetchCacheStats = async () => {
+    setCacheLoading(true)
+    setCacheResult(null)
+    
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      }
+      
+      if (testToken) {
+        headers['Authorization'] = `Bearer ${testToken}`
+      }
+      
+      const response = await fetch(`${spec?.servers?.[0]?.url || ''}/api/cache/stats`, {
+        method: 'GET',
+        headers
+      })
+      
+      const data = await response.json()
+      setCacheStats(data)
+      setCacheResult({
+        status: response.status,
+        data,
+        action: 'Statistiques du cache'
+      })
+      
+      console.log('📊 Stats cache:', data)
+    } catch (error: any) {
+      setCacheResult({
+        status: 0,
+        data: { error: error.message },
+        action: 'Statistiques du cache'
+      })
+    } finally {
+      setCacheLoading(false)
+    }
+  }
+
+  // Vider le cache
+  const clearCache = async (mode: 'self' | 'user' | 'all') => {
+    if (!testToken) {
+      alert('Token Bearer requis pour vider le cache')
+      return
+    }
+    
+    if (mode === 'user' && !clearUserId) {
+      alert('Veuillez entrer un userId')
+      return
+    }
+    
+    if (mode === 'all' && !confirm('⚠️ Êtes-vous sûr de vouloir vider TOUT le cache ?')) {
+      return
+    }
+    
+    setCacheLoading(true)
+    setCacheResult(null)
+    
+    try {
+      let url = `${spec?.servers?.[0]?.url || ''}/api/cache/clear`
+      
+      if (mode === 'user') {
+        url += `?userId=${clearUserId}`
+      } else if (mode === 'all') {
+        url += `?all=true`
+      }
+      
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${testToken}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      const data = await response.json()
+      setCacheResult({
+        status: response.status,
+        data,
+        action: mode === 'self' ? 'Cache personnel vidé' : 
+                mode === 'user' ? `Cache utilisateur ${clearUserId} vidé` :
+                'Cache complet vidé'
+      })
+      
+      // Rafraîchir les stats après vidage
+      if (response.ok) {
+        setTimeout(fetchCacheStats, 500)
+      }
+      
+      console.log('🗑️ Cache vidé:', data)
+    } catch (error: any) {
+      setCacheResult({
+        status: 0,
+        data: { error: error.message },
+        action: 'Vidage du cache'
+      })
+    } finally {
+      setCacheLoading(false)
     }
   }
 
@@ -685,6 +792,161 @@ export default function ApiDocsMobilePage() {
                 </ul>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Gestion du cache */}
+        <div className="bg-white rounded-lg shadow-sm border mb-6 p-6">
+          <h2 className="text-xl font-bold mb-4">🗄️ Gestion du Cache</h2>
+          
+          <div className="prose max-w-none mb-6">
+            <p className="text-gray-600 mb-2">
+              Le système utilise un cache intelligent pour les artistes avec un TTL de 3 heures.
+              Les données sont automatiquement rafraîchies, mais vous pouvez gérer le cache manuellement ici.
+            </p>
+            <div className="bg-blue-50 p-3 rounded text-sm text-blue-800">
+              <strong>💡 Clé du cache :</strong> <code>user_artists:&#123;userId&#125;</code>
+            </div>
+          </div>
+
+          {/* Statistiques du cache */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold">📊 Statistiques du cache</h3>
+              <button
+                onClick={fetchCacheStats}
+                disabled={cacheLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {cacheLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Chargement...
+                  </>
+                ) : (
+                  <>
+                    🔄 Obtenir les stats
+                  </>
+                )}
+              </button>
+            </div>
+            
+            {cacheStats?.success && (
+              <div className="grid md:grid-cols-3 gap-4 mb-4">
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="text-sm text-green-600 mb-1">Cache Hits</div>
+                  <div className="text-2xl font-bold text-green-700">{cacheStats.data.cache_stats.hits}</div>
+                  <div className="text-xs text-green-600">Taux: {cacheStats.data.cache_stats.hit_rate_percent}%</div>
+                </div>
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <div className="text-sm text-red-600 mb-1">Cache Misses</div>
+                  <div className="text-2xl font-bold text-red-700">{cacheStats.data.cache_stats.misses}</div>
+                </div>
+                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                  <div className="text-sm text-orange-600 mb-1">Stale Hits</div>
+                  <div className="text-2xl font-bold text-orange-700">{cacheStats.data.cache_stats.staleHits}</div>
+                  <div className="text-xs text-orange-600">Taux: {cacheStats.data.cache_stats.stale_rate_percent}%</div>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="text-sm text-blue-600 mb-1">Total Entrées</div>
+                  <div className="text-2xl font-bold text-blue-700">{cacheStats.data.cache_stats.totalEntries}</div>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="text-sm text-purple-600 mb-1">Performance</div>
+                  <div className="text-lg font-bold text-purple-700">{cacheStats.data.recommendations.performance}</div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="text-sm text-gray-600 mb-1">TTL</div>
+                  <div className="text-lg font-bold text-gray-700">{cacheStats.data.cache_info.ttl_hours}h</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Vidage du cache */}
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold mb-3">🗑️ Vider le cache</h3>
+            
+            <div className="space-y-3">
+              {/* Vider son propre cache */}
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <div className="flex-1">
+                  <div className="font-medium">Mon cache personnel</div>
+                  <div className="text-sm text-gray-600">Vide uniquement votre cache d'artistes</div>
+                </div>
+                <button
+                  onClick={() => clearCache('self')}
+                  disabled={cacheLoading || !testToken}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 whitespace-nowrap"
+                >
+                  🗑️ Vider mon cache
+                </button>
+              </div>
+
+              {/* Vider le cache d'un utilisateur spécifique */}
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <div className="font-medium mb-2">Cache d'un utilisateur spécifique</div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="User ID (UUID)"
+                    value={clearUserId}
+                    onChange={(e) => setClearUserId(e.target.value)}
+                    className="flex-1 px-3 py-2 border rounded-md text-sm"
+                  />
+                  <button
+                    onClick={() => clearCache('user')}
+                    disabled={cacheLoading || !testToken || !clearUserId}
+                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    🗑️ Vider
+                  </button>
+                </div>
+              </div>
+
+              {/* Vider tout le cache */}
+              <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                <div className="flex-1">
+                  <div className="font-medium text-red-800">⚠️ Tout le cache (tous les utilisateurs)</div>
+                  <div className="text-sm text-red-600">Action dangereuse - Nécessite confirmation</div>
+                </div>
+                <button
+                  onClick={() => clearCache('all')}
+                  disabled={cacheLoading || !testToken}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
+                >
+                  🚨 Tout vider
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Résultat des actions */}
+          {cacheResult && (
+            <div className={`p-4 rounded-lg border ${
+              cacheResult.status < 400 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="font-medium">{cacheResult.action}</span>
+                <span className={`px-2 py-1 text-xs rounded ${
+                  cacheResult.status < 400 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                }`}>
+                  {cacheResult.status} {cacheResult.status < 400 ? 'Success' : 'Error'}
+                </span>
+              </div>
+              <pre className="bg-white p-3 rounded text-sm overflow-x-auto border">
+                {JSON.stringify(cacheResult.data, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {/* Note importante */}
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+            <strong>ℹ️ Note :</strong> Le cache est automatiquement vidé lors d'un sync d'artistes ou d'un toggle de sélection.
+            Ces actions manuelles sont principalement utiles pour le debug et les tests.
           </div>
         </div>
         )}
