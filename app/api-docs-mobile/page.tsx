@@ -794,6 +794,7 @@ export default function ApiDocsMobilePage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Gestion du cache */}
         <div className="bg-white rounded-lg shadow-sm border mb-6 p-6">
@@ -949,7 +950,6 @@ export default function ApiDocsMobilePage() {
             Ces actions manuelles sont principalement utiles pour le debug et les tests.
           </div>
         </div>
-        )}
 
         {/* Liste des endpoints */}
         <div className="space-y-4">
