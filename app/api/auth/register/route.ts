@@ -8,14 +8,16 @@ export async function POST(request: NextRequest) {
     if (!email || !password) {
       return NextResponse.json({
         success: false,
-        error: 'Email et mot de passe requis'
+        error: 'Email et mot de passe requis',
+        redirect_url: `/register-result?success=false&error=${encodeURIComponent('Email et mot de passe requis')}`
       }, { status: 400 })
     }
 
     if (password.length < 6) {
       return NextResponse.json({
         success: false,
-        error: 'Le mot de passe doit contenir au moins 6 caractères'
+        error: 'Le mot de passe doit contenir au moins 6 caractères',
+        redirect_url: `/register-result?success=false&error=${encodeURIComponent('Le mot de passe doit contenir au moins 6 caractères')}`
       }, { status: 400 })
     }
 
@@ -45,14 +47,16 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: false,
-        error: errorMessage
+        error: errorMessage,
+        redirect_url: `/register-result?success=false&error=${encodeURIComponent(errorMessage)}`
       }, { status: 400 })
     }
 
     if (!data.user) {
       return NextResponse.json({
         success: false,
-        error: 'Échec de l\'inscription'
+        error: 'Échec de l\'inscription',
+        redirect_url: `/register-result?success=false&error=${encodeURIComponent('Échec de l\'inscription')}`
       }, { status: 400 })
     }
 
@@ -89,7 +93,8 @@ export async function POST(request: NextRequest) {
             email_confirmed: false
           },
           message: 'Inscription réussie. Vérifiez votre email pour confirmer votre compte.'
-        }
+        },
+        redirect_url: `/register-result?success=true&email=${encodeURIComponent(email)}`
       })
     }
 
@@ -110,14 +115,16 @@ export async function POST(request: NextRequest) {
           expires_at: data.session.expires_at,
           expires_in: data.session.expires_in
         }
-      }
+      },
+      redirect_url: `/register-result?success=true&email=${encodeURIComponent(email)}`
     })
 
   } catch (error: any) {
     console.error('❌ Erreur endpoint register:', error)
     return NextResponse.json({
       success: false,
-      error: 'Erreur interne du serveur'
+      error: 'Erreur interne du serveur',
+      redirect_url: `/register-result?success=false&error=${encodeURIComponent('Erreur interne du serveur')}`
     }, { status: 500 })
   }
 }
