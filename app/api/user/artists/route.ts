@@ -6,140 +6,126 @@ import { artistsCache } from '@/lib/artists-cache'
 // Force dynamic rendering pour éviter les erreurs de build Vercel
 export const dynamic = 'force-dynamic'
 
-// Helper function pour calculer le score de fanitude à la volée (sans stocker)
-async function calculateLiveFanitudeScore(artistSpotifyId: string, accessToken: string, refreshToken?: string, userId?: string): Promise<number> {
-  try {
-    let totalMinutes = 0
-    let topMinutes = 0
-    let recentMinutes = 0
-    let followBonus = 0
+// Structure pour stocker les données Spotify récupérées une seule fois
+interface SpotifyDataCache {
+  topArtistsShort: any[]
+  topArtistsMedium: any[]
+  topArtistsLong: any[]
+  recentlyPlayed: any[]
+  followedArtists: Set<string>
+}
 
-    // 1. Vérifier si l'artiste est dans les top artists
-    const timeRanges = ['short_term', 'medium_term', 'long_term']
-    for (const timeRange of timeRanges) {
-      try {
-        const topResponse = await fetch(
-          `https://api.spotify.com/v1/me/top/artists?time_range=${timeRange}&limit=50`,
-          { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        )
-        
-        // Gérer les erreurs 401 (token expiré)
-        if (topResponse.status === 401) {
-          throw new Error('TOKEN_EXPIRED')
-        }
-        
-        if (topResponse.ok) {
-          const topData = await topResponse.json()
-          const artistPosition = topData.items?.findIndex((a: any) => a.id === artistSpotifyId)
-          
-          if (artistPosition !== -1) {
-            // Plus l'artiste est haut dans le top, plus il a de points
-            // Position 0 = 50 points, Position 49 = 1 point
-            const positionBonus = Math.max(50 - artistPosition, 1)
-            const minutesFromPosition = positionBonus * 10
-            topMinutes += minutesFromPosition
-            console.log(`  📊 ${timeRange}: position ${artistPosition} → +${minutesFromPosition}min`)
-          }
-        }
-      } catch (error) {
-        console.log(`⚠️ Erreur top artists ${timeRange}:`, error)
-      }
-    }
-    totalMinutes += topMinutes
-
-    // 2. Vérifier les pistes récemment jouées
-      try {
-        const recentResponse = await fetch(
-          'https://api.spotify.com/v1/me/player/recently-played?limit=50',
-          { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        )
-        
-        if (recentResponse.status === 401) {
-          throw new Error('TOKEN_EXPIRED')
-        }
-        
-        if (recentResponse.ok) {
-        const recentData = await recentResponse.json()
-        const artistTracks = recentData.items?.filter((item: any) => 
-          item.track?.artists?.some((artist: any) => artist.id === artistSpotifyId)
-        ) || []
-        
-        // Chaque écoute récente = 3 minutes
-        recentMinutes = artistTracks.length * 3
-        totalMinutes += recentMinutes
-        if (recentMinutes > 0) {
-          console.log(`  🎵 Recently played: ${artistTracks.length} tracks → +${recentMinutes}min`)
-        }
-      }
-    } catch (error) {
-      console.log('⚠️ Erreur recently played:', error)
-    }
-
-    // 3. Vérifier si l'artiste est suivi
-      try {
-        const followResponse = await fetch(
-          `https://api.spotify.com/v1/me/following/contains?type=artist&ids=${artistSpotifyId}`,
-          { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        )
-        
-        if (followResponse.status === 401) {
-          throw new Error('TOKEN_EXPIRED')
-        }
-        
-        if (followResponse.ok) {
-        const followData = await followResponse.json()
-        if (followData[0] === true) {
-          followBonus = 20
-          totalMinutes += followBonus
-          console.log(`  ⭐ Followed → +${followBonus}min`)
-        }
-      }
-    } catch (error) {
-      console.log('⚠️ Erreur follow check:', error)
-    }
-
-    console.log(`  ✅ TOTAL pour ${artistSpotifyId}: ${totalMinutes}min (top:${topMinutes}, recent:${recentMinutes}, follow:${followBonus})`)
-    return totalMinutes
-  } catch (error: any) {
-    // Gérer les tokens expirés avec refresh automatique
-    if (error.message === 'TOKEN_EXPIRED' && refreshToken && userId) {
-      console.log(`🔄 Token expiré pour calcul fanitude ${artistSpotifyId}, refresh en cours...`)
-      
-      try {
-        const newAccessToken = await refreshSpotifyToken(refreshToken)
-        if (!newAccessToken) {
-          throw new Error('Failed to refresh Spotify token')
-        }
-        
-        // Mettre à jour le token dans la base
-        await supabaseAdmin
-          .from('user_streaming_platforms')
-          .update({ access_token: newAccessToken })
-          .eq('user_id', userId)
-          .eq('platform_id', (await supabaseAdmin
-            .from('streaming_platforms')
-            .select('id')
-            .eq('slug', 'spotify')
-            .single()
-          ).data?.id)
-        
-        console.log('✅ Token refreshé, nouveau calcul fanitude...')
-        
-        // Retry avec le nouveau token (sans refresh pour éviter la récursion)
-        return await calculateLiveFanitudeScore(artistSpotifyId, newAccessToken)
-      } catch (refreshError: any) {
-        if (refreshError.message === 'SPOTIFY_TOKEN_REVOKED') {
-          console.log('🚨 Token Spotify révoqué pendant calcul fanitude')
-          await disconnectRevokedSpotifyUser(userId)
-          throw new Error('SPOTIFY_TOKEN_REVOKED')
-        }
-        throw refreshError
-      }
-    }
-    
-    console.log(`⚠️ Erreur calcul fanitude pour ${artistSpotifyId}:`, error)
-    return 0
+// Récupérer TOUTES les données Spotify en une seule fois (optimisé)
+async function fetchAllSpotifyData(accessToken: string, artistIds: string[]): Promise<SpotifyDataCache> {
+  const cache: SpotifyDataCache = {
+    topArtistsShort: [],
+    topArtistsMedium: [],
+    topArtistsLong: [],
+    recentlyPlayed: [],
+    followedArtists: new Set()
   }
+
+  try {
+    // Récupérer les 3 tops en parallèle
+    const [shortTop, mediumTop, longTop, recentlyPlayed] = await Promise.all([
+      fetch('https://api.spotify.com/v1/me/top/artists?time_range=short_term&limit=50', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }),
+      fetch('https://api.spotify.com/v1/me/top/artists?time_range=medium_term&limit=50', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }),
+      fetch('https://api.spotify.com/v1/me/top/artists?time_range=long_term&limit=50', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }),
+      fetch('https://api.spotify.com/v1/me/player/recently-played?limit=50', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      })
+    ])
+
+    if (shortTop.ok) cache.topArtistsShort = (await shortTop.json()).items || []
+    if (mediumTop.ok) cache.topArtistsMedium = (await mediumTop.json()).items || []
+    if (longTop.ok) cache.topArtistsLong = (await longTop.json()).items || []
+    if (recentlyPlayed.ok) cache.recentlyPlayed = (await recentlyPlayed.json()).items || []
+
+    // Récupérer les follows par batch de 50 (limite Spotify)
+    const chunks = []
+    for (let i = 0; i < artistIds.length; i += 50) {
+      chunks.push(artistIds.slice(i, i + 50))
+    }
+
+    const followResults = await Promise.all(
+      chunks.map(chunk => 
+        fetch(`https://api.spotify.com/v1/me/following/contains?type=artist&ids=${chunk.join(',')}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        }).then(r => r.ok ? r.json() : [])
+      )
+    )
+
+    // Combiner les résultats des follows
+    followResults.forEach((results, chunkIndex) => {
+      results.forEach((isFollowed: boolean, index: number) => {
+        if (isFollowed) {
+          cache.followedArtists.add(chunks[chunkIndex][index])
+        }
+      })
+    })
+
+    console.log(`📊 Données Spotify récupérées: ${cache.topArtistsShort.length} short, ${cache.topArtistsMedium.length} medium, ${cache.topArtistsLong.length} long, ${cache.recentlyPlayed.length} recent, ${cache.followedArtists.size} followed`)
+
+  } catch (error) {
+    console.error('⚠️ Erreur lors de la récupération des données Spotify:', error)
+  }
+
+  return cache
+}
+
+// Calculer le score de fanitude pour UN artiste à partir des données déjà récupérées
+function calculateScoreFromCache(artistSpotifyId: string, artistName: string, spotifyCache: SpotifyDataCache): number {
+  let totalMinutes = 0
+  let topMinutes = 0
+  let recentMinutes = 0
+  let followBonus = 0
+
+  // 1. Vérifier dans les top artists
+  const topData = [
+    { range: 'short_term', items: spotifyCache.topArtistsShort },
+    { range: 'medium_term', items: spotifyCache.topArtistsMedium },
+    { range: 'long_term', items: spotifyCache.topArtistsLong }
+  ]
+
+  topData.forEach(({ range, items }) => {
+    const position = items.findIndex((a: any) => a.id === artistSpotifyId)
+    if (position !== -1) {
+      const positionBonus = Math.max(50 - position, 1)
+      const minutes = positionBonus * 10
+      topMinutes += minutes
+      console.log(`    📊 ${range}: position ${position} → +${minutes}min`)
+    }
+  })
+  totalMinutes += topMinutes
+
+  // 2. Vérifier dans recently played
+  const recentTracks = spotifyCache.recentlyPlayed.filter((item: any) =>
+    item.track?.artists?.some((artist: any) => artist.id === artistSpotifyId)
+  )
+  if (recentTracks.length > 0) {
+    recentMinutes = recentTracks.length * 3
+    totalMinutes += recentMinutes
+    console.log(`    🎵 Recently played: ${recentTracks.length} tracks → +${recentMinutes}min`)
+  }
+
+  // 3. Vérifier si suivi
+  if (spotifyCache.followedArtists.has(artistSpotifyId)) {
+    followBonus = 20
+    totalMinutes += followBonus
+    console.log(`    ⭐ Followed → +${followBonus}min`)
+  }
+
+  if (totalMinutes > 0) {
+    console.log(`  ✅ TOTAL pour "${artistName}": ${totalMinutes}min (top:${topMinutes}, recent:${recentMinutes}, follow:${followBonus})`)
+  }
+
+  return totalMinutes
 }
 
 // Helper function to make Spotify API calls with automatic token refresh
@@ -639,34 +625,42 @@ export async function GET(request: NextRequest) {
     
     // Calculer les scores de fanitude à la volée pour le tri (si connexion Spotify)
     if (spotifyConnection && artists.length > 0) {
-      console.log(`🔄 Calcul des scores de fanitude à la volée pour ${artists.length} artistes...`)
+      console.log(`🔄 Calcul des scores de fanitude pour ${artists.length} artistes (optimisé)...`)
       
       try {
-        const artistsWithScores = await Promise.all(
-          artists.map(async (artist) => {
-            if (artist.spotify_id) {
-              try {
-                console.log(`🎯 Calcul fanitude pour "${artist.name}" (${artist.spotify_id}):`)
-                const score = await calculateLiveFanitudeScore(
-                  artist.spotify_id, 
-                  spotifyConnection.access_token, 
-                  spotifyConnection.refresh_token, 
-                  user.id
-                )
-                return { ...artist, live_fanitude_score: score }
-              } catch (error) {
-                console.log(`⚠️ Erreur calcul score pour ${artist.name}:`, error)
-                return artist
-              }
-            }
-            return artist
-          })
+        // Récupérer les IDs Spotify de tous les artistes
+        const spotifyArtistIds = artists
+          .filter(a => a.spotify_id)
+          .map(a => a.spotify_id)
+
+        // Récupérer TOUTES les données Spotify en une seule fois (5 appels au lieu de 500!)
+        const spotifyCache = await fetchAllSpotifyData(
+          spotifyConnection.access_token,
+          spotifyArtistIds
         )
+
+        // Calculer les scores pour chaque artiste à partir du cache
+        const artistsWithScores = artists.map(artist => {
+          if (artist.spotify_id) {
+            try {
+              const score = calculateScoreFromCache(
+                artist.spotify_id,
+                artist.name,
+                spotifyCache
+              )
+              return { ...artist, live_fanitude_score: score }
+            } catch (error) {
+              console.log(`⚠️ Erreur calcul score pour ${artist.name}:`, error)
+              return artist
+            }
+          }
+          return artist
+        })
 
         // Trier par score de fanitude décroissant (les plus écoutés en premier)
         artists = artistsWithScores.sort((a, b) => b.live_fanitude_score - a.live_fanitude_score)
         
-        console.log(`✅ Scores calculés et triés (top 3: ${artists.slice(0, 3).map(a => `${a.name}:${a.live_fanitude_score}`).join(', ')})`)
+        console.log(`✅ Scores calculés et triés (top 5: ${artists.slice(0, 5).map(a => `${a.name}:${a.live_fanitude_score}`).join(', ')})`)
       } catch (error: any) {
         console.log('⚠️ Erreur lors du calcul des scores de fanitude:', error)
         
