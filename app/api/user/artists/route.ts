@@ -8,44 +8,61 @@ export const dynamic = 'force-dynamic'
 
 // Structure pour stocker les données Spotify récupérées une seule fois
 interface SpotifyDataCache {
-  topArtistsShort: any[]
-  topArtistsMedium: any[]
-  topArtistsLong: any[]
   recentlyPlayed: any[]
   followedArtists: Set<string>
+  savedTracks: any[]
+  userPlaylists: any[]
 }
 
 // Récupérer TOUTES les données Spotify en une seule fois (optimisé)
 async function fetchAllSpotifyData(accessToken: string, artistIds: string[]): Promise<SpotifyDataCache> {
   const cache: SpotifyDataCache = {
-    topArtistsShort: [],
-    topArtistsMedium: [],
-    topArtistsLong: [],
     recentlyPlayed: [],
-    followedArtists: new Set()
+    followedArtists: new Set(),
+    savedTracks: [],
+    userPlaylists: []
   }
 
   try {
-    // Récupérer les 3 tops en parallèle
-    const [shortTop, mediumTop, longTop, recentlyPlayed] = await Promise.all([
-      fetch('https://api.spotify.com/v1/me/top/artists?time_range=short_term&limit=50', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      }),
-      fetch('https://api.spotify.com/v1/me/top/artists?time_range=medium_term&limit=50', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      }),
-      fetch('https://api.spotify.com/v1/me/top/artists?time_range=long_term&limit=50', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      }),
+    // Récupérer les données essentielles en parallèle
+    const [recentlyPlayed, savedTracks, userPlaylists] = await Promise.all([
+      // Recently Played (50 derniers)
       fetch('https://api.spotify.com/v1/me/player/recently-played?limit=50', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }),
+      // Saved Tracks (max 50 pour performance)
+      fetch('https://api.spotify.com/v1/me/tracks?limit=50', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }),
+      // User Playlists
+      fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       })
     ])
 
-    if (shortTop.ok) cache.topArtistsShort = (await shortTop.json()).items || []
-    if (mediumTop.ok) cache.topArtistsMedium = (await mediumTop.json()).items || []
-    if (longTop.ok) cache.topArtistsLong = (await longTop.json()).items || []
     if (recentlyPlayed.ok) cache.recentlyPlayed = (await recentlyPlayed.json()).items || []
+    if (savedTracks.ok) cache.savedTracks = (await savedTracks.json()).items || []
+    if (userPlaylists.ok) {
+      const playlistsData = (await userPlaylists.json()).items || []
+      // Récupérer les tracks de chaque playlist (limité aux 5 premières pour performance)
+      const playlistTracks = await Promise.all(
+        playlistsData.slice(0, 5).map(async (playlist: any) => {
+          try {
+            const response = await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks?limit=100`, {
+              headers: { 'Authorization': `Bearer ${accessToken}` }
+            })
+            if (response.ok) {
+              const data = await response.json()
+              return data.items || []
+            }
+          } catch (error) {
+            console.log(`⚠️ Erreur récupération playlist ${playlist.name}:`, error)
+          }
+          return []
+        })
+      )
+      cache.userPlaylists = playlistTracks.flat()
+    }
 
     // Récupérer les follows par batch de 50 (limite Spotify)
     const chunks = []
@@ -70,7 +87,7 @@ async function fetchAllSpotifyData(accessToken: string, artistIds: string[]): Pr
       })
     })
 
-    console.log(`📊 Données Spotify récupérées: ${cache.topArtistsShort.length} short, ${cache.topArtistsMedium.length} medium, ${cache.topArtistsLong.length} long, ${cache.recentlyPlayed.length} recent, ${cache.followedArtists.size} followed`)
+    console.log(`📊 Données Spotify récupérées: ${cache.recentlyPlayed.length} recent, ${cache.savedTracks.length} saved, ${cache.userPlaylists.length} playlist tracks, ${cache.followedArtists.size} followed`)
 
   } catch (error) {
     console.error('⚠️ Erreur lors de la récupération des données Spotify:', error)
@@ -80,52 +97,56 @@ async function fetchAllSpotifyData(accessToken: string, artistIds: string[]): Pr
 }
 
 // Calculer le score de fanitude pour UN artiste à partir des données déjà récupérées
+// Système de points ÉQUITABLE : mêmes règles pour tous les users
 function calculateScoreFromCache(artistSpotifyId: string, artistName: string, spotifyCache: SpotifyDataCache): number {
-  let totalMinutes = 0
-  let topMinutes = 0
-  let recentMinutes = 0
-  let followBonus = 0
+  let totalPoints = 0
+  let recentPoints = 0
+  let savedPoints = 0
+  let playlistPoints = 0
+  let followPoints = 0
 
-  // 1. Vérifier dans les top artists
-  const topData = [
-    { range: 'short_term', items: spotifyCache.topArtistsShort },
-    { range: 'medium_term', items: spotifyCache.topArtistsMedium },
-    { range: 'long_term', items: spotifyCache.topArtistsLong }
-  ]
-
-  topData.forEach(({ range, items }) => {
-    const position = items.findIndex((a: any) => a.id === artistSpotifyId)
-    if (position !== -1) {
-      const positionBonus = Math.max(50 - position, 1)
-      const minutes = positionBonus * 10
-      topMinutes += minutes
-      console.log(`    📊 ${range}: position ${position} → +${minutes}min`)
-    }
-  })
-  totalMinutes += topMinutes
-
-  // 2. Vérifier dans recently played
+  // 1. Recently Played (50 derniers) : 10 points par track
   const recentTracks = spotifyCache.recentlyPlayed.filter((item: any) =>
     item.track?.artists?.some((artist: any) => artist.id === artistSpotifyId)
   )
   if (recentTracks.length > 0) {
-    recentMinutes = recentTracks.length * 3
-    totalMinutes += recentMinutes
-    console.log(`    🎵 Recently played: ${recentTracks.length} tracks → +${recentMinutes}min`)
+    recentPoints = recentTracks.length * 10
+    totalPoints += recentPoints
+    console.log(`    🎵 Recently played: ${recentTracks.length} tracks × 10 = ${recentPoints} pts`)
   }
 
-  // 3. Vérifier si suivi
+  // 2. Saved Tracks : 5 points par track
+  const savedTracksOfArtist = spotifyCache.savedTracks.filter((item: any) =>
+    item.track?.artists?.some((artist: any) => artist.id === artistSpotifyId)
+  )
+  if (savedTracksOfArtist.length > 0) {
+    savedPoints = savedTracksOfArtist.length * 5
+    totalPoints += savedPoints
+    console.log(`    💾 Saved tracks: ${savedTracksOfArtist.length} tracks × 5 = ${savedPoints} pts`)
+  }
+
+  // 3. Playlists : 3 points par track
+  const playlistTracksOfArtist = spotifyCache.userPlaylists.filter((item: any) =>
+    item.track?.artists?.some((artist: any) => artist.id === artistSpotifyId)
+  )
+  if (playlistTracksOfArtist.length > 0) {
+    playlistPoints = playlistTracksOfArtist.length * 3
+    totalPoints += playlistPoints
+    console.log(`    📋 Playlist tracks: ${playlistTracksOfArtist.length} tracks × 3 = ${playlistPoints} pts`)
+  }
+
+  // 4. Follow : 100 points bonus
   if (spotifyCache.followedArtists.has(artistSpotifyId)) {
-    followBonus = 20
-    totalMinutes += followBonus
-    console.log(`    ⭐ Followed → +${followBonus}min`)
+    followPoints = 100
+    totalPoints += followPoints
+    console.log(`    ⭐ Followed → ${followPoints} pts`)
   }
 
-  if (totalMinutes > 0) {
-    console.log(`  ✅ TOTAL pour "${artistName}": ${totalMinutes}min (top:${topMinutes}, recent:${recentMinutes}, follow:${followBonus})`)
+  if (totalPoints > 0) {
+    console.log(`  ✅ TOTAL pour "${artistName}": ${totalPoints} pts (recent:${recentPoints}, saved:${savedPoints}, playlist:${playlistPoints}, follow:${followPoints})`)
   }
 
-  return totalMinutes
+  return totalPoints
 }
 
 // Helper function to make Spotify API calls with automatic token refresh
