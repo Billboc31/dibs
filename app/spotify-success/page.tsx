@@ -34,7 +34,7 @@ export default function SpotifySuccessPage() {
         <div className="bg-white rounded-3xl shadow-2xl p-8 text-center border border-gray-100">
           {/* Logo */}
           <div className="mb-8 flex justify-center">
-            <DibsLogo size="medium" />
+            <DibsLogo size="normal" />
           </div>
 
           {/* Animation de succès */}
