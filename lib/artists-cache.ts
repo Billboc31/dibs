@@ -107,7 +107,7 @@ class ArtistsCache {
     }
 
     const now = Date.now()
-    const isExpired = now - entry.timestamp > this.cacheTTL
+    const isExpired = now - entry.timestamp > this.TTL
 
     return {
       artists: entry.data.all_artists || [],
