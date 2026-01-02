@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { artistsCache } from '@/lib/artists-cache'
 
 // Force dynamic rendering pour éviter les erreurs de build Vercel
 export const dynamic = 'force-dynamic'
@@ -75,6 +76,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`✅ Successfully saved ${artistIds.length} artists for user ${user.id}`)
+    
+    // Invalider le cache pour forcer un recalcul au prochain appel
+    artistsCache.invalidateUser(user.id)
+    console.log(`🗑️ Cache invalidé pour l'utilisateur ${user.id}`)
     
     return NextResponse.json({
       success: true,
