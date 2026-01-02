@@ -10,6 +10,9 @@ export const dynamic = 'force-dynamic'
 async function calculateLiveFanitudeScore(artistSpotifyId: string, accessToken: string, refreshToken?: string, userId?: string): Promise<number> {
   try {
     let totalMinutes = 0
+    let topMinutes = 0
+    let recentMinutes = 0
+    let followBonus = 0
 
     // 1. Vérifier si l'artiste est dans les top artists
     const timeRanges = ['short_term', 'medium_term', 'long_term']
@@ -33,13 +36,16 @@ async function calculateLiveFanitudeScore(artistSpotifyId: string, accessToken: 
             // Plus l'artiste est haut dans le top, plus il a de points
             // Position 0 = 50 points, Position 49 = 1 point
             const positionBonus = Math.max(50 - artistPosition, 1)
-            totalMinutes += positionBonus * 10 // 10 minutes par point de position
+            const minutesFromPosition = positionBonus * 10
+            topMinutes += minutesFromPosition
+            console.log(`  📊 ${timeRange}: position ${artistPosition} → +${minutesFromPosition}min`)
           }
         }
       } catch (error) {
         console.log(`⚠️ Erreur top artists ${timeRange}:`, error)
       }
     }
+    totalMinutes += topMinutes
 
     // 2. Vérifier les pistes récemment jouées
       try {
@@ -59,7 +65,11 @@ async function calculateLiveFanitudeScore(artistSpotifyId: string, accessToken: 
         ) || []
         
         // Chaque écoute récente = 3 minutes
-        totalMinutes += artistTracks.length * 3
+        recentMinutes = artistTracks.length * 3
+        totalMinutes += recentMinutes
+        if (recentMinutes > 0) {
+          console.log(`  🎵 Recently played: ${artistTracks.length} tracks → +${recentMinutes}min`)
+        }
       }
     } catch (error) {
       console.log('⚠️ Erreur recently played:', error)
@@ -79,13 +89,16 @@ async function calculateLiveFanitudeScore(artistSpotifyId: string, accessToken: 
         if (followResponse.ok) {
         const followData = await followResponse.json()
         if (followData[0] === true) {
-          totalMinutes += 20 // Bonus de 20 minutes pour les artistes suivis
+          followBonus = 20
+          totalMinutes += followBonus
+          console.log(`  ⭐ Followed → +${followBonus}min`)
         }
       }
     } catch (error) {
       console.log('⚠️ Erreur follow check:', error)
     }
 
+    console.log(`  ✅ TOTAL pour ${artistSpotifyId}: ${totalMinutes}min (top:${topMinutes}, recent:${recentMinutes}, follow:${followBonus})`)
     return totalMinutes
   } catch (error: any) {
     // Gérer les tokens expirés avec refresh automatique
@@ -626,13 +639,14 @@ export async function GET(request: NextRequest) {
     
     // Calculer les scores de fanitude à la volée pour le tri (si connexion Spotify)
     if (spotifyConnection && artists.length > 0) {
-      console.log('🔄 Calcul des scores de fanitude à la volée pour le tri...')
+      console.log(`🔄 Calcul des scores de fanitude à la volée pour ${artists.length} artistes...`)
       
       try {
         const artistsWithScores = await Promise.all(
           artists.map(async (artist) => {
             if (artist.spotify_id) {
               try {
+                console.log(`🎯 Calcul fanitude pour "${artist.name}" (${artist.spotify_id}):`)
                 const score = await calculateLiveFanitudeScore(
                   artist.spotify_id, 
                   spotifyConnection.access_token, 
