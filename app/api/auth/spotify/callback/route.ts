@@ -68,10 +68,10 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('✅ All done! Redirecting...')
-    // Redirect to artist selection with success message
+    // Redirect to success page that tells user to return to mobile app
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.url
     return NextResponse.redirect(
-      new URL('/select-artists?platform=spotify&connected=true', baseUrl)
+      new URL('/spotify-success', baseUrl)
     )
   } catch (error) {
     console.error('❌ Spotify callback error:', error)
