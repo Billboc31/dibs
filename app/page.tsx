@@ -1,8 +1,22 @@
 'use client'
 
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import DibsLogo from '@/components/DibsLogo'
 
 export default function HomePage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    // Détecter si on a des tokens d'authentification dans le hash (après validation email)
+    const hash = window.location.hash
+    if (hash.includes('access_token') || hash.includes('type=signup') || hash.includes('type=recovery')) {
+      console.log('🔄 Redirection vers /auth/callback avec tokens')
+      // Rediriger vers /auth/callback avec tous les paramètres
+      router.push(`/auth/callback${hash}`)
+      return
+    }
+  }, [router])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-blue-50 flex items-center justify-center p-6">
