@@ -14,13 +14,28 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
-        const token_hash = searchParams.get('token_hash')
-        const type = searchParams.get('type')
-        const access_token = searchParams.get('access_token')
-        const refresh_token = searchParams.get('refresh_token')
-        const redirect_to = searchParams.get('redirect_to')
+        // Lire les paramètres depuis l'URL (query string)
+        let token_hash = searchParams.get('token_hash')
+        let type = searchParams.get('type')
+        let access_token = searchParams.get('access_token')
+        let refresh_token = searchParams.get('refresh_token')
+        let redirect_to = searchParams.get('redirect_to')
 
-        console.log('Auth callback params:', { token_hash, type, access_token, redirect_to })
+        // Si pas de paramètres dans la query string, lire depuis le hash
+        if (!access_token && !token_hash && window.location.hash) {
+          const hash = window.location.hash.substring(1) // Enlever le #
+          const params = new URLSearchParams(hash)
+          
+          token_hash = params.get('token_hash')
+          type = params.get('type')
+          access_token = params.get('access_token')
+          refresh_token = params.get('refresh_token')
+          redirect_to = params.get('redirect_to')
+          
+          console.log('Auth callback params (from hash):', { token_hash, type, access_token, redirect_to })
+        } else {
+          console.log('Auth callback params (from query):', { token_hash, type, access_token, redirect_to })
+        }
 
         if (token_hash && type) {
           setMessage('Vérification du Magic Link...')

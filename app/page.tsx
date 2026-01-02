@@ -12,8 +12,8 @@ export default function HomePage() {
     const hash = window.location.hash
     if (hash.includes('access_token') || hash.includes('type=signup') || hash.includes('type=recovery')) {
       console.log('🔄 Redirection vers /auth/callback avec tokens')
-      // Rediriger vers /auth/callback avec tous les paramètres
-      router.push(`/auth/callback${hash}`)
+      // Rediriger en utilisant window.location pour préserver le hash
+      window.location.href = `/auth/callback${hash}`
       return
     }
   }, [router])
