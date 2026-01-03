@@ -71,6 +71,16 @@ export default function HomePage() {
             </p>
           </div>
         </div>
+
+        {/* Lien admin discret */}
+        <div className="mt-6 text-center">
+          <a
+            href="/admin-crons"
+            className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            🔧 Administration
+          </a>
+        </div>
       </div>
     </div>
   )
