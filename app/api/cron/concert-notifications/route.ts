@@ -75,22 +75,22 @@ export async function GET(request: NextRequest) {
     const uniqueArtists = Array.from(uniqueArtistsMap.values())
     console.log(`🎵 ${uniqueArtists.length} artistes uniques à synchroniser`)
 
-    // 2. Pour chaque artiste, vérifier si concerts en BDD sont récents (<7 jours)
+    // 2. Pour chaque artiste, vérifier si concerts en BDD sont récents (<24h)
     for (const artist of uniqueArtists) {
       try {
-        // Vérifier si on a déjà des concerts récents en BDD
+        // Vérifier si on a déjà des concerts récents en BDD (synchro < 24h)
         const { data: existingConcerts } = await supabaseAdmin
           .from('concerts')
           .select('id, last_synced_at')
           .eq('artist_id', artist.id)
-          .gte('last_synced_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+          .gte('last_synced_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
 
         if (existingConcerts && existingConcerts.length > 0) {
-          console.log(`⏭️ Concerts de ${artist.name} déjà à jour (synced < 7j)`)
+          console.log(`⏭️ Concerts de ${artist.name} déjà à jour (synced < 24h)`)
           continue
         }
 
-        // Concerts trop anciens ou inexistants → appel Ticketmaster
+        // Concerts anciens (>24h) ou inexistants → appel Ticketmaster pour refresh
         console.log(`🎫 Fetch Ticketmaster pour ${artist.name}...`)
         const concerts = await fetchArtistConcertsInFrance(artist.name, artist.ticketmaster_id)
         apiCalls++
