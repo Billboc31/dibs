@@ -13,9 +13,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    console.log('🧹 Démarrage du job de nettoyage des notifications...')
+    console.log('🧹 Démarrage du job de nettoyage...')
 
-    let totalDeleted = 0
+    let totalDeletedNotifications = 0
+    let totalDeletedConcerts = 0
+
+    // PARTIE 1: NETTOYAGE DES NOTIFICATIONS
+    // ======================================
 
     // 1. Supprimer les notifications de concerts passés et lus après 30 jours
     const { data: oldReadNotifs, error: error1 } = await supabaseAdmin
@@ -30,7 +34,7 @@ export async function GET(request: NextRequest) {
       console.error('❌ Erreur suppression anciennes notifications lues:', error1)
     } else {
       const count1 = oldReadNotifs?.length || 0
-      totalDeleted += count1
+      totalDeletedNotifications += count1
       console.log(`  🗑️ ${count1} notifications lues de concerts passés supprimées (>30j)`)
     }
 
@@ -46,7 +50,7 @@ export async function GET(request: NextRequest) {
       console.error('❌ Erreur suppression notifications passées non lues:', error2)
     } else {
       const count2 = oldUnreadNotifs?.length || 0
-      totalDeleted += count2
+      totalDeletedNotifications += count2
       console.log(`  🗑️ ${count2} notifications de concerts passés supprimées (>7j)`)
     }
 
@@ -61,19 +65,64 @@ export async function GET(request: NextRequest) {
       console.error('❌ Erreur suppression notifications très anciennes:', error3)
     } else {
       const count3 = veryOldNotifs?.length || 0
-      totalDeleted += count3
+      totalDeletedNotifications += count3
       console.log(`  🗑️ ${count3} notifications très anciennes supprimées (>90j)`)
     }
 
-    console.log(`✅ Nettoyage terminé: ${totalDeleted} notifications supprimées au total`)
+    console.log(`✅ Nettoyage notifications terminé: ${totalDeletedNotifications} notifications supprimées`)
+
+    // PARTIE 2: NETTOYAGE DES CONCERTS PASSÉS
+    // ========================================
+
+    console.log('🎫 Nettoyage des concerts passés dans la table concerts...')
+
+    // Supprimer les concerts passés depuis plus de 7 jours
+    const { data: pastConcerts, error: concertsError } = await supabaseAdmin
+      .from('concerts')
+      .delete()
+      .lt('event_date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .select('id')
+
+    if (concertsError) {
+      console.error('❌ Erreur suppression concerts passés:', concertsError)
+    } else {
+      totalDeletedConcerts = pastConcerts?.length || 0
+      console.log(`  🗑️ ${totalDeletedConcerts} concerts passés supprimés (>7j)`)
+    }
+
+    // Supprimer les concerts avec last_synced_at > 30 jours (données obsolètes)
+    const { data: staleConcerts, error: staleError } = await supabaseAdmin
+      .from('concerts')
+      .delete()
+      .lt('last_synced_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .gte('event_date', new Date().toISOString())
+      .select('id')
+
+    if (staleError) {
+      console.error('❌ Erreur suppression concerts obsolètes:', staleError)
+    } else {
+      const staleCount = staleConcerts?.length || 0
+      totalDeletedConcerts += staleCount
+      console.log(`  🗑️ ${staleCount} concerts obsolètes supprimés (non synchro depuis >30j)`)
+    }
+
+    console.log(`✅ Nettoyage terminé!`)
+    console.log(`📊 Total: ${totalDeletedNotifications} notifications + ${totalDeletedConcerts} concerts supprimés`)
 
     return NextResponse.json({
       success: true,
       stats: {
-        old_read_deleted: oldReadNotifs?.length || 0,
-        old_unread_deleted: oldUnreadNotifs?.length || 0,
-        very_old_deleted: veryOldNotifs?.length || 0,
-        total_deleted: totalDeleted
+        notifications: {
+          old_read_deleted: oldReadNotifs?.length || 0,
+          old_unread_deleted: oldUnreadNotifs?.length || 0,
+          very_old_deleted: veryOldNotifs?.length || 0,
+          total_deleted: totalDeletedNotifications
+        },
+        concerts: {
+          past_concerts_deleted: pastConcerts?.length || 0,
+          stale_concerts_deleted: staleConcerts?.length || 0,
+          total_deleted: totalDeletedConcerts
+        }
       }
     })
 
