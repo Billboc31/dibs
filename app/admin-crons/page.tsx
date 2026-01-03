@@ -391,10 +391,10 @@ export default function AdminCronsPage() {
                     <div className="bg-white rounded p-3 text-xs text-gray-600">
                       <div className="font-medium mb-1">Supprime:</div>
                       <ul className="list-disc list-inside space-y-0.5">
-                        <li>Notifs lues passées (>30j)</li>
-                        <li>Notifs non lues passées (>7j)</li>
-                        <li>Concerts passés (>7j)</li>
-                        <li>Concerts non sync (>30j)</li>
+                        <li>Notifs lues passées (&gt;30j)</li>
+                        <li>Notifs non lues passées (&gt;7j)</li>
+                        <li>Concerts passés (&gt;7j)</li>
+                        <li>Concerts non sync (&gt;30j)</li>
                       </ul>
                     </div>
                   </div>
