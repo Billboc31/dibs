@@ -630,6 +630,13 @@ export default function ApiDocsMobilePage() {
                   Serveur: {spec.servers?.[0]?.url || 'N/A'}
                 </div>
               )}
+              <a
+                href="/admin-crons"
+                className="px-3 py-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white text-sm font-medium rounded-md transition-colors"
+                title="Administration des Crons"
+              >
+                🔧 Admin Crons
+              </a>
               <button
                 onClick={() => setHeaderCollapsed(!headerCollapsed)}
                 className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-md transition-colors"
