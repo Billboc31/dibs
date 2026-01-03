@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     
     console.log('📊 Phase 1: Synchronisation des concerts depuis Ticketmaster...')
     
-    // 1. Récupérer tous les artistes uniques suivis (selected = true dans user_artists)
+    // 1. Récupérer tous les artistes uniques suivis (présence dans user_artists = suivi)
     const { data: followedArtists, error: artistsError } = await supabaseAdmin
       .from('user_artists')
       .select(`
@@ -53,7 +53,6 @@ export async function GET(request: NextRequest) {
           ticketmaster_id
         )
       `)
-      .eq('selected', true)
 
     if (artistsError) {
       console.error('❌ Erreur récupération artistes suivis:', artistsError)
@@ -181,7 +180,6 @@ export async function GET(request: NextRequest) {
           .from('user_artists')
           .select('artist_id')
           .eq('user_id', user.id)
-          .eq('selected', true)
 
         if (userArtistsError || !userArtists || userArtists.length === 0) {
           continue
