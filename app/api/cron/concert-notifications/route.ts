@@ -254,7 +254,9 @@ export async function GET(request: NextRequest) {
                 event_date: concert.event_date,
                 event_venue: concert.venue_name,
                 event_city: concert.venue_city,
-                event_url: concert.event_url
+                event_url: concert.event_url,
+                // ✅ Image du concert (ou fallback sur image artiste si pas d'image concert)
+                image_url: concert.image_url || artist.image_url
               })
 
             // Si pas d'erreur et pas de conflit, c'est une nouvelle notification
