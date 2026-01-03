@@ -601,7 +601,7 @@ export default function AdminCronsPage() {
                 <div>
                   <div className="font-medium text-gray-900 mb-1">🔄 Synchronisation</div>
                   <ul className="space-y-1 text-xs">
-                    <li>• Concerts : quotidien 6h (si >24h)</li>
+                    <li>• Concerts : quotidien 6h (si &gt;24h)</li>
                     <li>• Cleanup : hebdo dimanche 3h</li>
                     <li>• Upsert = pas de doublons</li>
                     <li>• GPS matching pour notifications</li>
