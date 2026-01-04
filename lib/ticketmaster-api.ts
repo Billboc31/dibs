@@ -144,6 +144,7 @@ export async function fetchArtistConcertsInFrance(
     const url = `https://app.ticketmaster.com/discovery/v2/events.json?${params.toString()}`
     
     console.log(`🎫 Recherche concerts Ticketmaster FR: ${artistName}`)
+    console.log(`   URL: ${url.replace(apiKey, 'API_KEY')}`) // Log URL sans exposer la clé
     
     const response = await fetch(url, {
       headers: {
@@ -152,14 +153,22 @@ export async function fetchArtistConcertsInFrance(
     })
 
     if (!response.ok) {
+      const errorText = await response.text()
       console.error(`❌ Erreur Ticketmaster API: ${response.status}`)
+      console.error(`   Response: ${errorText.substring(0, 200)}`)
       return []
     }
 
     const data = await response.json()
     
+    console.log(`   Total résultats: ${data.page?.totalElements || 0}`)
+    
     if (!data._embedded?.events) {
       console.log(`📭 Aucun concert trouvé pour ${artistName} en France`)
+      // Log pour debug : peut-être que l'artiste a des concerts ailleurs ?
+      if (data.page?.totalElements === 0) {
+        console.log(`   → Cet artiste n'a aucun concert prévu dans les 6 prochains mois en France`)
+      }
       return []
     }
 
@@ -188,6 +197,44 @@ export async function fetchArtistConcertsInFrance(
   } catch (error) {
     console.error(`❌ Erreur lors de la recherche de concerts:`, error)
     return []
+  }
+}
+
+/**
+ * TEST: Vérifier si un artiste a des concerts (peu importe le pays)
+ */
+export async function hasAnyConcerts(ticketmasterArtistId: string): Promise<number> {
+  const apiKey = process.env.TICKETMASTER_API_KEY
+  
+  if (!apiKey) {
+    return 0
+  }
+
+  try {
+    const startDate = new Date().toISOString().split('T')[0] + 'T00:00:00Z'
+    const endDate = new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T23:59:59Z'
+
+    const params = new URLSearchParams({
+      apikey: apiKey,
+      attractionId: ticketmasterArtistId,
+      classificationName: 'Music',
+      startDateTime: startDate,
+      endDateTime: endDate,
+      size: '1'
+    })
+
+    const url = `https://app.ticketmaster.com/discovery/v2/events.json?${params.toString()}`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      return 0
+    }
+
+    const data = await response.json()
+    return data.page?.totalElements || 0
+
+  } catch (error) {
+    return 0
   }
 }
 

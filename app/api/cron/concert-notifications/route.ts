@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { fetchArtistConcertsInFrance, findTicketmasterArtistId } from '@/lib/ticketmaster-api'
+import { fetchArtistConcertsInFrance, findTicketmasterArtistId, hasAnyConcerts } from '@/lib/ticketmaster-api'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,7 +119,19 @@ export async function GET(request: NextRequest) {
         apiCalls++
 
         if (concerts.length === 0) {
-          console.log(`📭 Aucun concert trouvé pour ${artist.name}`)
+          console.log(`📭 Aucun concert trouvé pour ${artist.name} en France`)
+          
+          // Debug: vérifier si l'artiste a des concerts ailleurs dans le monde
+          if (ticketmasterId) {
+            const totalWorldwide = await hasAnyConcerts(ticketmasterId)
+            apiCalls++
+            if (totalWorldwide > 0) {
+              console.log(`   ℹ️ Mais ${totalWorldwide} concert(s) trouvé(s) dans le monde entier`)
+            } else {
+              console.log(`   ℹ️ Aucun concert prévu dans les 6 prochains mois (nulle part)`)
+            }
+          }
+          
           continue
         }
 
