@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { fetchArtistConcertsInFrance } from '@/lib/ticketmaster-api'
+import { fetchArtistConcertsInFrance, findTicketmasterArtistId } from '@/lib/ticketmaster-api'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,7 +94,28 @@ export async function GET(request: NextRequest) {
 
         // Pas encore synchro aujourd'hui → appel Ticketmaster pour refresh quotidien
         console.log(`🎫 Fetch Ticketmaster pour ${artist.name}...`)
-        const concerts = await fetchArtistConcertsInFrance(artist.name, artist.ticketmaster_id)
+        
+        // Chercher l'ID Ticketmaster de l'artiste s'il n'existe pas
+        let ticketmasterId = artist.ticketmaster_id
+        if (!ticketmasterId) {
+          console.log(`  🔍 Recherche ID Ticketmaster pour ${artist.name}...`)
+          ticketmasterId = await findTicketmasterArtistId(artist.name)
+          apiCalls++ // Appel API pour trouver l'ID
+          
+          if (ticketmasterId) {
+            console.log(`  ✅ ID Ticketmaster trouvé: ${ticketmasterId}`)
+            // Sauvegarder l'ID dans la BDD pour la prochaine fois
+            await supabaseAdmin
+              .from('artists')
+              .update({ ticketmaster_id: ticketmasterId })
+              .eq('id', artist.id)
+          } else {
+            console.log(`  ⚠️ Aucun ID Ticketmaster trouvé pour ${artist.name}`)
+          }
+        }
+        
+        // Chercher les concerts avec l'ID Ticketmaster (ou nom si pas d'ID)
+        const concerts = await fetchArtistConcertsInFrance(artist.name, ticketmasterId || undefined)
         apiCalls++
 
         if (concerts.length === 0) {
