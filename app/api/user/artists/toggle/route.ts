@@ -174,11 +174,9 @@ export async function POST(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
 
-    // Mettre à jour le cache pour chaque artiste modifié (sans tout vider)
-    for (const { artistId, selected } of artistsToToggle) {
-      artistsCache.updateArtistSelected(user.id, artistId, selected)
-    }
-    console.log(`✅ Cache mis à jour pour ${artistsToToggle.length} artiste(s)`)
+    // Invalider le cache de l'utilisateur (sera recalculé au prochain appel)
+    artistsCache.invalidateUser(user.id)
+    console.log(`🗑️ Cache invalidé pour l'utilisateur ${user.id}`)
 
     return NextResponse.json({
       success: true,

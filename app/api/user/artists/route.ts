@@ -625,9 +625,9 @@ export async function GET(request: NextRequest) {
       selectedArtists?.map(ua => [ua.artist_id, ua]) || []
     )
 
-    // Combiner les données : tous les artistes + flag de sélection + anciens scores
+    // Combiner les données : tous les artistes + anciens scores
+    // Note: 'selected' sera ajouté APRÈS depuis user_artists (BDD = source de vérité)
     let artists = allArtists?.map(artist => {
-      const userArtist = selectedArtistsMap.get(artist.id)
       const oldScore = oldScoresMap.get(artist.id) || 0 // Récupérer l'ancien score du cache
       return {
         id: artist.id,
@@ -636,7 +636,6 @@ export async function GET(request: NextRequest) {
         apple_music_id: artist.apple_music_id,
         deezer_id: artist.deezer_id,
         image_url: artist.image_url,
-        selected: !!userArtist,
         live_fanitude_score: oldScore // Initialiser avec l'ancien score, sera recalculé si possible
       }
     }) || []
@@ -696,7 +695,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Préparer TOUS les artistes avec leurs scores pour le cache
+    // Préparer TOUS les artistes avec leurs scores pour le cache (SANS 'selected')
     const finalArtists = artists.map(({ live_fanitude_score, ...artist }) => ({
       ...artist,
       fanitude_score: live_fanitude_score || 0 // Score calculé en temps réel
@@ -704,7 +703,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ Calculé ${finalArtists.length} artistes pour user ${user.id}`)
     
-    // Mettre en cache TOUS les artistes triés
+    // Mettre en cache TOUS les artistes triés (sans le flag selected)
     artistsCache.set(user.id, finalArtists)
     
     // Récupérer les données paginées depuis le cache (qui vient d'être mis à jour)
@@ -714,10 +713,18 @@ export async function GET(request: NextRequest) {
       throw new Error('Erreur interne: impossible de récupérer les données du cache')
     }
     
+    // Ajouter le flag 'selected' depuis la BDD (source de vérité unique)
+    const selectedArtistIds = new Set(selectedArtists?.map(ua => ua.artist_id) || [])
+    const artistsWithSelected = cachedPaginatedResult.data.artists.map(artist => ({
+      ...artist,
+      selected: selectedArtistIds.has(artist.id)
+    }))
+    
     return NextResponse.json({
       success: true,
       data: {
         ...cachedPaginatedResult.data,
+        artists: artistsWithSelected,
         cached: false,
         cache_status: 'fresh'
       }
@@ -734,6 +741,18 @@ export async function GET(request: NextRequest) {
       // Marquer le cache comme périmé pour les prochains appels
       artistsCache.markAsStale(user.id)
       
+      // Récupérer 'selected' depuis la BDD (même en fallback)
+      const { data: selectedArtists } = await supabaseAdmin
+        .from('user_artists')
+        .select('artist_id')
+        .eq('user_id', user.id)
+      
+      const selectedArtistIds = new Set(selectedArtists?.map(ua => ua.artist_id) || [])
+      const artistsWithSelected = cachedFallback.data.artists.map(artist => ({
+        ...artist,
+        selected: selectedArtistIds.has(artist.id)
+      }))
+      
       // Déterminer le message approprié selon le type d'erreur
       const isRevoked = error.message === 'SPOTIFY_TOKEN_REVOKED'
       
@@ -741,6 +760,7 @@ export async function GET(request: NextRequest) {
         success: true,
         data: {
           ...cachedFallback.data,
+          artists: artistsWithSelected,
           cached: true,
           cache_status: isRevoked ? 'fallback_revoked' : 'fallback_error',
           warning: isRevoked 

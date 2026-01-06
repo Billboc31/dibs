@@ -84,7 +84,6 @@ class ArtistsCache {
       },
       stats: {
         total_artists: allArtists.length,
-        selected_artists: allArtists.filter((a: any) => a.selected).length,
         displayed_artists: paginatedArtists.length
       }
     }
@@ -148,31 +147,6 @@ class ArtistsCache {
       this.cache.set(key, entry)
       console.log(`⚠️ Cache marqué comme périmé: ${key}`)
     }
-  }
-
-  /**
-   * Met à jour uniquement le flag 'selected' pour un artiste dans le cache
-   */
-  updateArtistSelected(userId: string, artistId: string, selected: boolean): boolean {
-    const key = this.generateKey(userId)
-    const entry = this.cache.get(key)
-    
-    if (!entry || !entry.data.all_artists) {
-      return false
-    }
-
-    const artists = entry.data.all_artists
-    const artistIndex = artists.findIndex((a: any) => a.id === artistId)
-    
-    if (artistIndex === -1) {
-      return false
-    }
-
-    artists[artistIndex].selected = selected
-    this.cache.set(key, entry)
-    console.log(`✅ Cache mis à jour: ${artistId} selected=${selected}`)
-    
-    return true
   }
 
   /**
