@@ -125,10 +125,9 @@ export async function fetchArtistConcertsInFrance(
 
     const params = new URLSearchParams({
       apikey: apiKey,
-      countryCode: 'FR', // France uniquement
       classificationName: 'Music',
       sort: 'date,asc',
-      size: '50', // Max 50 concerts par artiste
+      size: '200', // Plus large pour ensuite filtrer
       startDateTime: startDate,
       endDateTime: endDate
     })
@@ -143,8 +142,8 @@ export async function fetchArtistConcertsInFrance(
 
     const url = `https://app.ticketmaster.com/discovery/v2/events.json?${params.toString()}`
     
-    console.log(`🎫 Recherche concerts Ticketmaster FR: ${artistName}`)
-    console.log(`   URL: ${url.replace(apiKey, 'API_KEY')}`) // Log URL sans exposer la clé
+    console.log(`🎫 Recherche concerts Ticketmaster (tous pays): ${artistName}`)
+    console.log(`   URL: ${url.replace(apiKey, 'API_KEY')}`)
     
     const response = await fetch(url, {
       headers: {
@@ -161,28 +160,25 @@ export async function fetchArtistConcertsInFrance(
 
     const data = await response.json()
     
-    console.log(`   Total résultats: ${data.page?.totalElements || 0}`)
+    console.log(`   Total résultats (tous pays): ${data.page?.totalElements || 0}`)
     
     if (!data._embedded?.events) {
-      console.log(`📭 Aucun concert trouvé pour ${artistName} en France`)
-      // Log pour debug : peut-être que l'artiste a des concerts ailleurs ?
-      if (data.page?.totalElements === 0) {
-        console.log(`   → Cet artiste n'a aucun concert prévu dans les 6 prochains mois en France`)
-      }
+      console.log(`📭 Aucun concert trouvé pour ${artistName}`)
       return []
     }
 
-    const events: TicketmasterEvent[] = data._embedded.events.map((event: any) => {
+    // Parser tous les événements
+    const allEvents: TicketmasterEvent[] = data._embedded.events.map((event: any) => {
       const venue = event._embedded?.venues?.[0]
       const image = event.images?.find((img: any) => img.ratio === '16_9' && img.width > 1000)
 
       return {
-        id: event.id, // ID unique Ticketmaster
+        id: event.id,
         name: event.name,
         date: event.dates?.start?.dateTime || event.dates?.start?.localDate,
         venue: venue?.name || 'Lieu inconnu',
         city: venue?.city?.name || '',
-        country: venue?.country?.countryCode || 'FR',
+        country: venue?.country?.countryCode || '',
         url: event.url,
         imageUrl: image?.url,
         lat: venue?.location?.latitude ? parseFloat(venue.location.latitude) : undefined,
@@ -190,9 +186,23 @@ export async function fetchArtistConcertsInFrance(
       }
     })
 
-    console.log(`✅ ${events.length} concerts trouvés pour ${artistName} en France`)
+    // Filtrer uniquement les concerts en France
+    const frenchEvents = allEvents.filter(event => event.country === 'FR')
     
-    return events
+    console.log(`   → ${frenchEvents.length} concerts en France (sur ${allEvents.length} total)`)
+    
+    if (frenchEvents.length === 0) {
+      console.log(`📭 Aucun concert trouvé pour ${artistName} en France`)
+      // Log des pays où il y a des concerts
+      const countries = [...new Set(allEvents.map(e => e.country))].filter(c => c)
+      if (countries.length > 0) {
+        console.log(`   ℹ️ Concerts trouvés dans: ${countries.join(', ')}`)
+      }
+    } else {
+      console.log(`✅ ${frenchEvents.length} concerts trouvés pour ${artistName} en France`)
+    }
+    
+    return frenchEvents
 
   } catch (error) {
     console.error(`❌ Erreur lors de la recherche de concerts:`, error)
