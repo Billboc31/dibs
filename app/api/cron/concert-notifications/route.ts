@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { gunzipSync } from 'zlib'
+import { createGunzip } from 'zlib'
+import { pipeline } from 'stream/promises'
+import { Readable } from 'stream'
+import StreamArray from 'stream-json/streamers/StreamArray'
 
 export const dynamic = 'force-dynamic'
 
-// Augmenter la limite de mémoire pour le parsing du gros fichier
+// Configuration pour le parsing du gros fichier
 export const maxDuration = 300 // 5 minutes max
+export const runtime = 'nodejs' // Nécessaire pour les streams
 
 /**
  * Calcule la distance entre deux points GPS (en km)
@@ -23,9 +27,9 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
 }
 
 /**
- * Télécharge et parse le fichier .gz de tous les événements FR depuis Ticketmaster
+ * Télécharge et parse le fichier .gz en streaming (économise la mémoire)
  */
-async function downloadTicketmasterFeed(): Promise<any[]> {
+async function downloadTicketmasterFeedStreaming(): Promise<any[]> {
   const apiKey = process.env.TICKETMASTER_API_KEY
   
   if (!apiKey) {
@@ -36,8 +40,8 @@ async function downloadTicketmasterFeed(): Promise<any[]> {
   try {
     const url = `https://app.ticketmaster.com/discovery-feed/v2/events.json?apikey=${apiKey}&countryCode=FR`
     
-    console.log('📡 Téléchargement du fichier Ticketmaster FR...')
-    const startDownload = Date.now()
+    console.log('📡 Téléchargement et parsing en streaming (économise RAM)...')
+    const startTime = Date.now()
     
     const response = await fetch(url, {
       headers: {
@@ -50,30 +54,46 @@ async function downloadTicketmasterFeed(): Promise<any[]> {
       return []
     }
 
-    const buffer = await response.arrayBuffer()
-    const downloadTime = ((Date.now() - startDownload) / 1000).toFixed(2)
-    const sizeMB = (buffer.byteLength / 1024 / 1024).toFixed(2)
-    console.log(`✅ Téléchargé: ${sizeMB} MB en ${downloadTime}s`)
+    if (!response.body) {
+      console.error(`❌ Pas de body dans la réponse`)
+      return []
+    }
 
-    // Décompresser
-    console.log('📦 Décompression...')
-    const startDecompress = Date.now()
-    const decompressed = gunzipSync(Buffer.from(buffer))
-    const decompressTime = ((Date.now() - startDecompress) / 1000).toFixed(2)
-    const decompressedMB = (decompressed.length / 1024 / 1024).toFixed(2)
-    console.log(`✅ Décompressé: ${decompressedMB} MB en ${decompressTime}s`)
+    // Convertir le ReadableStream web en Node.js Stream
+    const webStream = response.body
+    const nodeStream = Readable.fromWeb(webStream as any)
 
-    // Parser JSON
-    console.log('🔍 Parsing JSON...')
-    const startParse = Date.now()
-    const jsonData = JSON.parse(decompressed.toString())
-    const parseTime = ((Date.now() - startParse) / 1000).toFixed(2)
-    console.log(`✅ Parsé en ${parseTime}s`)
+    // Pipeline: téléchargement → décompression → parsing JSON streaming
+    const events: any[] = []
+    const gunzip = createGunzip()
+    const jsonStream = StreamArray.withParser()
 
-    const events = jsonData.events || []
-    console.log(`📊 Total événements: ${events.length}`)
+    let eventCount = 0
 
-    return events
+    return new Promise((resolve, reject) => {
+      nodeStream
+        .pipe(gunzip)
+        .pipe(jsonStream)
+        .on('data', ({ key, value }: any) => {
+          // StreamArray émet chaque élément du tableau "events"
+          events.push(value)
+          eventCount++
+          
+          // Log de progression tous les 10k événements
+          if (eventCount % 10000 === 0) {
+            console.log(`   📊 ${eventCount} événements parsés...`)
+          }
+        })
+        .on('end', () => {
+          const duration = ((Date.now() - startTime) / 1000).toFixed(2)
+          console.log(`✅ ${events.length} événements parsés en ${duration}s (streaming)`)
+          resolve(events)
+        })
+        .on('error', (error: any) => {
+          console.error(`❌ Erreur streaming:`, error)
+          reject(error)
+        })
+    })
 
   } catch (error) {
     console.error(`❌ Erreur téléchargement Ticketmaster:`, error)
@@ -152,7 +172,7 @@ export async function GET(request: NextRequest) {
 
     console.log('📊 Phase 1: Téléchargement fichier Ticketmaster...\n')
 
-    const allEvents = await downloadTicketmasterFeed()
+    const allEvents = await downloadTicketmasterFeedStreaming()
     
     if (allEvents.length === 0) {
       return NextResponse.json({
