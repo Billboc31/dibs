@@ -14,6 +14,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-qr-code": "^2.0.12",
+    "stream-chain": "^3.4.0",
     "stream-json": "^1.9.1",
     "stripe": "^20.0.0",
     "swagger-jsdoc": "^6.2.8",

@@ -3,7 +3,10 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { createGunzip } from 'zlib'
 import { pipeline } from 'stream/promises'
 import { Readable } from 'stream'
-import StreamArray from 'stream-json/streamers/StreamArray'
+import { parser } from 'stream-json'
+import { streamArray } from 'stream-json/streamers/StreamArray'
+import { chain } from 'stream-chain'
+import { pick } from 'stream-json/filters/Pick'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,16 +69,26 @@ async function downloadTicketmasterFeedStreaming(): Promise<any[]> {
     // Pipeline: téléchargement → décompression → parsing JSON streaming
     const events: any[] = []
     const gunzip = createGunzip()
-    const jsonStream = StreamArray.withParser()
 
     let eventCount = 0
 
     return new Promise((resolve, reject) => {
-      nodeStream
-        .pipe(gunzip)
-        .pipe(jsonStream)
-        .on('data', ({ key, value }: any) => {
-          // StreamArray émet chaque élément du tableau "events"
+      // Créer la chaîne de traitement :
+      // 1. gunzip décompresse le stream
+      // 2. parser() parse le JSON en streaming
+      // 3. pick({ filter: 'events' }) sélectionne uniquement la propriété "events"
+      // 4. streamArray() parse le tableau "events" élément par élément
+      const pipeline = chain([
+        nodeStream,
+        gunzip,
+        parser(),
+        pick({ filter: 'events' }),
+        streamArray()
+      ])
+
+      pipeline
+        .on('data', ({ value }: any) => {
+          // Chaque élément du tableau "events"
           events.push(value)
           eventCount++
           
