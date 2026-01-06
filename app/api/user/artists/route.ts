@@ -250,13 +250,27 @@ export async function GET(request: NextRequest) {
     // Vérifier le cache d'abord
     const cachedResult = artistsCache.get(user.id, page, limit)
     if (cachedResult) {
-      // Si le cache est frais, le retourner directement
+      // Si le cache est frais, le retourner avec 'selected' depuis la BDD
       if (!cachedResult.isStale) {
         console.log('⚡ Cache frais utilisé')
+        
+        // Ajouter le flag 'selected' depuis la BDD (source de vérité unique)
+        const { data: selectedArtists } = await supabaseAdmin
+          .from('user_artists')
+          .select('artist_id')
+          .eq('user_id', user.id)
+        
+        const selectedArtistIds = new Set(selectedArtists?.map(ua => ua.artist_id) || [])
+        const artistsWithSelected = cachedResult.data.artists.map(artist => ({
+          ...artist,
+          selected: selectedArtistIds.has(artist.id)
+        }))
+        
         return NextResponse.json({
           success: true,
           data: {
             ...cachedResult.data,
+            artists: artistsWithSelected,
             cached: true,
             cache_status: 'fresh'
           }
@@ -573,10 +587,23 @@ export async function GET(request: NextRequest) {
         console.log('🛡️ Utilisation du cache périmé comme fallback (Spotify inaccessible)')
         artistsCache.markAsStale(user.id)
         
+        // Ajouter le flag 'selected' depuis la BDD (même en fallback)
+        const { data: selectedArtists } = await supabaseAdmin
+          .from('user_artists')
+          .select('artist_id')
+          .eq('user_id', user.id)
+        
+        const selectedArtistIds = new Set(selectedArtists?.map(ua => ua.artist_id) || [])
+        const artistsWithSelected = cachedFallback.data.artists.map(artist => ({
+          ...artist,
+          selected: selectedArtistIds.has(artist.id)
+        }))
+        
         return NextResponse.json({
           success: true,
           data: {
             ...cachedFallback.data,
+            artists: artistsWithSelected,
             cached: true,
             cache_status: 'fallback_spotify_error',
             warning: 'Données du cache utilisées. Spotify temporairement inaccessible.'
