@@ -1239,6 +1239,350 @@ const spec = {
           }
         }
       }
+    },
+
+    // === LOCALISATION UTILISATEUR ===
+    '/api/user/location': {
+      get: {
+        tags: ['User'],
+        summary: '📍 Récupérer la localisation de l\'utilisateur',
+        'x-priority': 'P2',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Localisation récupérée',
+            content: {
+              'application/json': {
+                examples: {
+                  with_location: {
+                    summary: 'Utilisateur avec localisation',
+                    value: {
+                      success: true,
+                      data: {
+                        location_city: 'Paris',
+                        location_country: 'FR',
+                        location_lat: 48.8566,
+                        location_lng: 2.3522,
+                        notification_radius_km: 50
+                      }
+                    }
+                  },
+                  no_location: {
+                    summary: 'Pas de localisation définie',
+                    value: {
+                      success: true,
+                      data: {
+                        location_city: null,
+                        location_country: null,
+                        location_lat: null,
+                        location_lng: null,
+                        notification_radius_km: 50
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Non authentifié',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Token manquant ou invalide',
+                    value: {
+                      success: false,
+                      error: 'Invalid or expired token'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      patch: {
+        tags: ['User'],
+        summary: '📍 Définir/modifier la localisation de l\'utilisateur',
+        'x-priority': 'P2',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          content: {
+            'application/json': {
+              examples: {
+                set_location: {
+                  summary: 'Définir localisation complète',
+                  value: {
+                    location_city: 'Paris',
+                    location_country: 'FR',
+                    location_lat: 48.8566,
+                    location_lng: 2.3522,
+                    notification_radius_km: 50
+                  }
+                },
+                update_radius: {
+                  summary: 'Modifier uniquement le rayon',
+                  value: {
+                    notification_radius_km: 100
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Localisation mise à jour',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Succès',
+                    value: {
+                      success: true,
+                      data: {
+                        location_city: 'Paris',
+                        location_country: 'FR',
+                        location_lat: 48.8566,
+                        location_lng: 2.3522,
+                        notification_radius_km: 50
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    // === NOTIFICATIONS ===
+    '/api/notifications': {
+      get: {
+        tags: ['Notifications'],
+        summary: '🔔 Liste des notifications de l\'utilisateur',
+        'x-priority': 'P2',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'read',
+            in: 'query',
+            description: 'Filtrer par statut lu/non lu',
+            schema: {
+              type: 'string',
+              enum: ['true', 'false']
+            }
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Liste des notifications',
+            content: {
+              'application/json': {
+                examples: {
+                  concert_notifications: {
+                    summary: 'Notifications de concerts',
+                    value: {
+                      success: true,
+                      data: [
+                        {
+                          id: '550e8400-e29b-41d4-a716-446655440000',
+                          user_id: '550e8400-e29b-41d4-a716-446655440001',
+                          artist_id: '550e8400-e29b-41d4-a716-446655440002',
+                          type: 'concert',
+                          title: 'Metallica en concert !',
+                          message: 'Metallica sera à Stade de France, Paris le vendredi 15 mars 2024',
+                          event_id: 'vvG1zZ9dXgX7P',
+                          event_name: 'Metallica - World Tour 2024',
+                          event_date: '2024-03-15T20:00:00Z',
+                          event_venue: 'Stade de France',
+                          event_city: 'Paris',
+                          event_url: 'https://www.ticketmaster.fr/...',
+                          image_url: 'https://s1.ticketm.net/dam/a/123/xyz.jpg',
+                          read: false,
+                          created_at: '2024-01-10T06:00:00Z'
+                        },
+                        {
+                          id: '550e8400-e29b-41d4-a716-446655440003',
+                          user_id: '550e8400-e29b-41d4-a716-446655440001',
+                          artist_id: '550e8400-e29b-41d4-a716-446655440004',
+                          type: 'concert',
+                          title: 'Coldplay en concert !',
+                          message: 'Coldplay sera à AccorHotels Arena, Paris le samedi 20 avril 2024',
+                          event_id: 'vvG1zZ9dXgX8Q',
+                          event_name: 'Coldplay - Music of the Spheres Tour',
+                          event_date: '2024-04-20T19:30:00Z',
+                          event_venue: 'AccorHotels Arena',
+                          event_city: 'Paris',
+                          event_url: 'https://www.ticketmaster.fr/...',
+                          image_url: 'https://s1.ticketm.net/dam/a/456/abc.jpg',
+                          read: true,
+                          created_at: '2024-01-08T06:00:00Z'
+                        }
+                      ]
+                    }
+                  },
+                  empty: {
+                    summary: 'Aucune notification',
+                    value: {
+                      success: true,
+                      data: []
+                    }
+                  },
+                  filtered_unread: {
+                    summary: 'Seulement non lues (read=false)',
+                    value: {
+                      success: true,
+                      data: [
+                        {
+                          id: '550e8400-e29b-41d4-a716-446655440000',
+                          type: 'concert',
+                          title: 'Metallica en concert !',
+                          read: false,
+                          created_at: '2024-01-10T06:00:00Z'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    '/api/notifications/{id}': {
+      patch: {
+        tags: ['Notifications'],
+        summary: '✅ Marquer une notification comme lue',
+        'x-priority': 'P2',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID de la notification',
+            schema: {
+              type: 'string',
+              format: 'uuid'
+            }
+          }
+        ],
+        requestBody: {
+          content: {
+            'application/json': {
+              examples: {
+                mark_as_read: {
+                  summary: 'Marquer comme lue',
+                  value: {
+                    read: true
+                  }
+                },
+                mark_as_unread: {
+                  summary: 'Marquer comme non lue',
+                  value: {
+                    read: false
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Notification mise à jour',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Succès',
+                    value: {
+                      success: true,
+                      data: {
+                        id: '550e8400-e29b-41d4-a716-446655440000',
+                        read: true,
+                        updated_at: '2024-01-11T10:30:00Z'
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          404: {
+            description: 'Notification non trouvée',
+            content: {
+              'application/json': {
+                examples: {
+                  not_found: {
+                    summary: 'Notification inexistante',
+                    value: {
+                      success: false,
+                      error: 'Notification not found'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      delete: {
+        tags: ['Notifications'],
+        summary: '🗑️ Supprimer une notification',
+        'x-priority': 'P2',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID de la notification',
+            schema: {
+              type: 'string',
+              format: 'uuid'
+            }
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Notification supprimée',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Succès',
+                    value: {
+                      success: true,
+                      message: 'Notification deleted successfully'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          404: {
+            description: 'Notification non trouvée',
+            content: {
+              'application/json': {
+                examples: {
+                  not_found: {
+                    summary: 'Notification inexistante',
+                    value: {
+                      success: false,
+                      error: 'Notification not found'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
