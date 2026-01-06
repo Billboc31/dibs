@@ -7,8 +7,10 @@ export default function AdminCronsPage() {
   const [cronSecret, setCronSecret] = useState('')
   const [concertResult, setConcertResult] = useState<any>(null)
   const [cleanupResult, setCleanupResult] = useState<any>(null)
+  const [notifResult, setNotifResult] = useState<any>(null)
   const [loadingConcert, setLoadingConcert] = useState(false)
   const [loadingCleanup, setLoadingCleanup] = useState(false)
+  const [loadingNotif, setLoadingNotif] = useState(false)
   
   // Cache management
   const [cacheStats, setCacheStats] = useState<any>(null)
@@ -100,6 +102,33 @@ export default function AdminCronsPage() {
       setConcertResult({ error: error.message })
     } finally {
       setLoadingConcert(false)
+    }
+  }
+
+  // Lancer le cron de notifications uniquement
+  const runNotificationCron = async () => {
+    if (!cronSecret) {
+      alert('❌ Veuillez entrer le CRON_SECRET')
+      return
+    }
+
+    setLoadingNotif(true)
+    setNotifResult(null)
+
+    try {
+      const response = await fetch('/api/cron/generate-notifications', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${cronSecret}`
+        }
+      })
+
+      const data = await response.json()
+      setNotifResult({ status: response.status, data })
+    } catch (error: any) {
+      setNotifResult({ error: error.message })
+    } finally {
+      setLoadingNotif(false)
     }
   }
 
@@ -372,7 +401,95 @@ export default function AdminCronsPage() {
                   )}
                 </div>
 
-                {/* Cron 2: Cleanup */}
+                {/* Cron 2: Notifications uniquement */}
+                <div className="bg-gradient-to-br from-green-50 to-teal-50 rounded-lg p-6 border border-green-200">
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className="text-3xl">🔔</span>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Générer Notifications</h3>
+                      <p className="text-xs text-gray-600">Depuis concerts déjà en BDD (avec logs détaillés)</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mb-4 text-sm">
+                    <div className="bg-white rounded p-3 text-xs text-gray-600">
+                      <div className="font-medium mb-1">Étapes:</div>
+                      <ol className="list-decimal list-inside space-y-0.5">
+                        <li>Récupère users avec localisation</li>
+                        <li>Récupère leurs artistes suivis</li>
+                        <li>Récupère concerts depuis BDD</li>
+                        <li>Calcule distances GPS</li>
+                        <li>Crée notifications si dans rayon</li>
+                      </ol>
+                      <div className="mt-2 pt-2 border-t border-gray-200">
+                        <span className="font-medium">💡 Logs détaillés:</span> Email, ville, distance par concert
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={runNotificationCron}
+                    disabled={!cronSecret || loadingNotif}
+                    className="w-full px-4 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-teal-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                  >
+                    {loadingNotif ? '⏳ Exécution...' : '🔔 Générer notifications'}
+                  </button>
+
+                  {/* Résultats */}
+                  {notifResult && (
+                    <div className={`mt-4 p-4 rounded-lg ${
+                      notifResult.error || notifResult.status >= 400 
+                        ? 'bg-red-50 border-2 border-red-300' 
+                        : 'bg-white border-2 border-green-300'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xl">
+                          {notifResult.error || notifResult.status >= 400 ? '❌' : '✅'}
+                        </span>
+                        <span className="font-bold text-gray-900">
+                          {notifResult.error ? 'Erreur' : 'Succès'}
+                        </span>
+                      </div>
+                      
+                      {notifResult.data?.success && (
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="bg-green-50 rounded p-2 text-center">
+                            <div className="text-gray-600">Users</div>
+                            <div className="text-xl font-bold text-green-600">
+                              {notifResult.data.stats?.users_processed || 0}
+                            </div>
+                          </div>
+                          <div className="bg-teal-50 rounded p-2 text-center">
+                            <div className="text-gray-600">Notifs</div>
+                            <div className="text-xl font-bold text-teal-600">
+                              {notifResult.data.stats?.notifications_created || 0}
+                            </div>
+                          </div>
+                          <div className="bg-blue-50 rounded p-2 text-center">
+                            <div className="text-gray-600">Concerts</div>
+                            <div className="text-xl font-bold text-blue-600">
+                              {notifResult.data.stats?.concerts_evaluated || 0}
+                            </div>
+                          </div>
+                          <div className="bg-purple-50 rounded p-2 text-center">
+                            <div className="text-gray-600">Durée</div>
+                            <div className="text-xl font-bold text-purple-600">
+                              {notifResult.data.stats?.duration_seconds || 0}s
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {(notifResult.error || notifResult.data?.error) && (
+                        <p className="text-sm text-red-700 mt-2 font-medium">
+                          {notifResult.error || notifResult.data?.error}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Cron 3: Cleanup */}
                 <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-lg p-6 border border-orange-200">
                   <div className="flex items-center gap-3 mb-4">
                     <span className="text-3xl">🧹</span>
