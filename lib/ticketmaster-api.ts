@@ -105,11 +105,10 @@ export async function fetchConcertsNearby(
 
 /**
  * Rechercher tous les concerts d'un artiste en France (12 prochains mois)
- * Optimisé pour réduire le nombre d'appels API
+ * Utilise keyword + countryCode pour éviter les problèmes régionaux d'attractionId
  */
 export async function fetchArtistConcertsInFrance(
-  artistName: string,
-  ticketmasterArtistId?: string
+  artistName: string
 ): Promise<TicketmasterEvent[]> {
   const apiKey = process.env.TICKETMASTER_API_KEY
   
@@ -137,9 +136,7 @@ export async function fetchArtistConcertsInFrance(
     params.append('keyword', artistName)
     params.append('countryCode', 'FR') // Forcer France pour avoir les bons résultats
     
-    console.log(`   Mode: Recherche par KEYWORD (pas attractionId) pour éviter les problèmes régionaux`)
-    if (ticketmasterArtistId) {
-      console.log(`   Note: attractionId ${ticketmasterArtistId} ignoré (peut être spécifique à une région)`)
+    console.log(`   Mode: Recherche par KEYWORD avec countryCode=FR`)
 
     const url = `https://app.ticketmaster.com/discovery/v2/events.json?${params.toString()}`
     

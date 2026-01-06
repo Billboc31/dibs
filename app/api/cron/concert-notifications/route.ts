@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { fetchArtistConcertsInFrance, findTicketmasterArtistId, hasAnyConcerts } from '@/lib/ticketmaster-api'
+import { fetchArtistConcertsInFrance } from '@/lib/ticketmaster-api'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,8 +49,7 @@ export async function GET(request: NextRequest) {
         artists (
           id,
           name,
-          spotify_id,
-          ticketmaster_id
+          spotify_id
         )
       `)
 
@@ -95,43 +94,12 @@ export async function GET(request: NextRequest) {
         // Pas encore synchro aujourd'hui → appel Ticketmaster pour refresh quotidien
         console.log(`🎫 Fetch Ticketmaster pour ${artist.name}...`)
         
-        // Chercher l'ID Ticketmaster de l'artiste s'il n'existe pas
-        let ticketmasterId = artist.ticketmaster_id
-        if (!ticketmasterId) {
-          console.log(`  🔍 Recherche ID Ticketmaster pour ${artist.name}...`)
-          ticketmasterId = await findTicketmasterArtistId(artist.name)
-          apiCalls++ // Appel API pour trouver l'ID
-          
-          if (ticketmasterId) {
-            console.log(`  ✅ ID Ticketmaster trouvé: ${ticketmasterId}`)
-            // Sauvegarder l'ID dans la BDD pour la prochaine fois
-            await supabaseAdmin
-              .from('artists')
-              .update({ ticketmaster_id: ticketmasterId })
-              .eq('id', artist.id)
-          } else {
-            console.log(`  ⚠️ Aucun ID Ticketmaster trouvé pour ${artist.name}`)
-          }
-        }
-        
-        // Chercher les concerts avec l'ID Ticketmaster (ou nom si pas d'ID)
-        const concerts = await fetchArtistConcertsInFrance(artist.name, ticketmasterId || undefined)
+        // Chercher les concerts directement par keyword (plus fiable que attractionId)
+        const concerts = await fetchArtistConcertsInFrance(artist.name)
         apiCalls++
 
         if (concerts.length === 0) {
           console.log(`📭 Aucun concert trouvé pour ${artist.name} en France`)
-          
-          // Debug: vérifier si l'artiste a des concerts ailleurs dans le monde
-          if (ticketmasterId) {
-            const totalWorldwide = await hasAnyConcerts(ticketmasterId)
-            apiCalls++
-            if (totalWorldwide > 0) {
-              console.log(`   ℹ️ Mais ${totalWorldwide} concert(s) trouvé(s) dans le monde entier`)
-            } else {
-              console.log(`   ℹ️ Aucun concert prévu dans les 6 prochains mois (nulle part)`)
-            }
-          }
-          
           continue
         }
 
