@@ -169,9 +169,18 @@ export async function fetchArtistConcertsInFrance(
     }
 
     // Parser tous les événements
-    const allEvents: TicketmasterEvent[] = data._embedded.events.map((event: any) => {
+    const allEvents: TicketmasterEvent[] = data._embedded.events.map((event: any, index: number) => {
       const venue = event._embedded?.venues?.[0]
       const image = event.images?.find((img: any) => img.ratio === '16_9' && img.width > 1000)
+      
+      const countryCode = venue?.country?.countryCode || ''
+
+      // Log détaillé pour debug
+      console.log(`   Event ${index + 1}: ${event.name}`)
+      console.log(`     → Venue: ${venue?.name || 'N/A'}`)
+      console.log(`     → City: ${venue?.city?.name || 'N/A'}`)
+      console.log(`     → Country Code: "${countryCode}" (type: ${typeof countryCode})`)
+      console.log(`     → Date: ${event.dates?.start?.localDate || 'N/A'}`)
 
       return {
         id: event.id,
@@ -179,7 +188,7 @@ export async function fetchArtistConcertsInFrance(
         date: event.dates?.start?.dateTime || event.dates?.start?.localDate,
         venue: venue?.name || 'Lieu inconnu',
         city: venue?.city?.name || '',
-        country: venue?.country?.countryCode || '',
+        country: countryCode,
         url: event.url,
         imageUrl: image?.url,
         lat: venue?.location?.latitude ? parseFloat(venue.location.latitude) : undefined,
@@ -187,8 +196,17 @@ export async function fetchArtistConcertsInFrance(
       }
     })
 
+    console.log(`   📊 Résumé des pays trouvés:`)
+    allEvents.forEach((event, i) => {
+      console.log(`     ${i + 1}. ${event.city} - Country: "${event.country}"`)
+    })
+
     // Filtrer uniquement les concerts en France
-    const frenchEvents = allEvents.filter(event => event.country === 'FR')
+    const frenchEvents = allEvents.filter(event => {
+      const isFrance = event.country === 'FR'
+      console.log(`   Filtrage: ${event.city} - "${event.country}" === "FR" ? ${isFrance}`)
+      return isFrance
+    })
     
     console.log(`   → ${frenchEvents.length} concerts en France (sur ${allEvents.length} total)`)
     
