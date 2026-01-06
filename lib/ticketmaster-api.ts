@@ -194,7 +194,7 @@ export async function fetchArtistConcertsInFrance(
     if (frenchEvents.length === 0) {
       console.log(`📭 Aucun concert trouvé pour ${artistName} en France`)
       // Log des pays où il y a des concerts
-      const countries = [...new Set(allEvents.map(e => e.country))].filter(c => c)
+      const countries = Array.from(new Set(allEvents.map(e => e.country))).filter(c => c)
       if (countries.length > 0) {
         console.log(`   ℹ️ Concerts trouvés dans: ${countries.join(', ')}`)
       }
