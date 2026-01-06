@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { artistsCache } from '@/lib/artists-cache'
 
 // Force dynamic rendering pour éviter les erreurs de build Vercel
 export const dynamic = 'force-dynamic'
@@ -174,9 +173,9 @@ export async function POST(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
 
-    // Invalider le cache de l'utilisateur (sera recalculé au prochain appel)
-    artistsCache.invalidateUser(user.id)
-    console.log(`🗑️ Cache invalidé pour l'utilisateur ${user.id}`)
+    // Pas besoin d'invalider le cache car 'selected' est toujours lu depuis la BDD
+    // Le cache contient uniquement les scores de fanitude qui ne changent pas lors d'un toggle
+    console.log(`✅ Toggle terminé (cache préservé car 'selected' toujours lu depuis BDD)`)
 
     return NextResponse.json({
       success: true,
