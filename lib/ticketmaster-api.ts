@@ -132,13 +132,14 @@ export async function fetchArtistConcertsInFrance(
       endDateTime: endDate
     })
 
-    // Recherche par ID artiste si disponible (plus précis)
+    // IMPORTANT : Ne pas utiliser attractionId avec countryCode car Ticketmaster
+    // a des IDs différents par région/tournée. On cherche par keyword avec countryCode.
+    params.append('keyword', artistName)
+    params.append('countryCode', 'FR') // Forcer France pour avoir les bons résultats
+    
+    console.log(`   Mode: Recherche par KEYWORD (pas attractionId) pour éviter les problèmes régionaux`)
     if (ticketmasterArtistId) {
-      params.append('attractionId', ticketmasterArtistId)
-    } else {
-      // Sinon par nom (peut être moins précis)
-      params.append('keyword', artistName)
-    }
+      console.log(`   Note: attractionId ${ticketmasterArtistId} ignoré (peut être spécifique à une région)`)
 
     const url = `https://app.ticketmaster.com/discovery/v2/events.json?${params.toString()}`
     
