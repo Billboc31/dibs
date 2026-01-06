@@ -17,6 +17,7 @@ export interface TicketmasterEvent {
   priceMin?: number
   priceMax?: number
   currency?: string
+  attractionId?: string // ID Ticketmaster de l'artiste (pour référence future)
 }
 
 /**
@@ -170,6 +171,8 @@ export async function fetchArtistConcertsInFrance(
     const allEvents: TicketmasterEvent[] = data._embedded.events.map((event: any, index: number) => {
       const venue = event._embedded?.venues?.[0]
       const image = event.images?.find((img: any) => img.ratio === '16_9' && img.width > 1000)
+      const attractions = event._embedded?.attractions || []
+      const attractionId = attractions.length > 0 ? attractions[0].id : undefined
       
       const countryCode = venue?.country?.countryCode || ''
 
@@ -179,6 +182,7 @@ export async function fetchArtistConcertsInFrance(
       console.log(`     → City: ${venue?.city?.name || 'N/A'}`)
       console.log(`     → Country Code: "${countryCode}" (type: ${typeof countryCode})`)
       console.log(`     → Date: ${event.dates?.start?.localDate || 'N/A'}`)
+      console.log(`     → Attraction ID: ${attractionId || 'N/A'}`)
 
       return {
         id: event.id,
@@ -190,7 +194,8 @@ export async function fetchArtistConcertsInFrance(
         url: event.url,
         imageUrl: image?.url,
         lat: venue?.location?.latitude ? parseFloat(venue.location.latitude) : undefined,
-        lng: venue?.location?.longitude ? parseFloat(venue.location.longitude) : undefined
+        lng: venue?.location?.longitude ? parseFloat(venue.location.longitude) : undefined,
+        attractionId: attractionId
       }
     })
 

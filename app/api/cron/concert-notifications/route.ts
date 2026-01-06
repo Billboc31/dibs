@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
         artists (
           id,
           name,
-          spotify_id
+          spotify_id,
+          ticketmaster_id
         )
       `)
 
@@ -101,6 +102,16 @@ export async function GET(request: NextRequest) {
         if (concerts.length === 0) {
           console.log(`📭 Aucun concert trouvé pour ${artist.name} en France`)
           continue
+        }
+
+        // Extraire et sauvegarder l'attractionId si disponible dans la réponse
+        // (pour référence future, même si on ne l'utilise pas pour chercher)
+        if (concerts[0]?.attractionId && !artist.ticketmaster_id) {
+          console.log(`  💾 Sauvegarde attractionId ${concerts[0].attractionId} pour ${artist.name}`)
+          await supabaseAdmin
+            .from('artists')
+            .update({ ticketmaster_id: concerts[0].attractionId })
+            .eq('id', artist.id)
         }
 
         // 3. Upsert les concerts dans la BDD (INSERT ou UPDATE si existe)
