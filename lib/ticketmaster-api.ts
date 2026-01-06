@@ -104,7 +104,7 @@ export async function fetchConcertsNearby(
 }
 
 /**
- * Rechercher tous les concerts d'un artiste en France (6 prochains mois)
+ * Rechercher tous les concerts d'un artiste en France (12 prochains mois)
  * Optimisé pour réduire le nombre d'appels API
  */
 export async function fetchArtistConcertsInFrance(
@@ -119,9 +119,9 @@ export async function fetchArtistConcertsInFrance(
   }
 
   try {
-    // Dates : aujourd'hui → +6 mois
+    // Dates : aujourd'hui → +12 mois (1 an)
     const startDate = new Date().toISOString().split('T')[0] + 'T00:00:00Z'
-    const endDate = new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T23:59:59Z'
+    const endDate = new Date(Date.now() + 12 * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T23:59:59Z'
 
     const params = new URLSearchParams({
       apikey: apiKey,
@@ -143,6 +143,7 @@ export async function fetchArtistConcertsInFrance(
     const url = `https://app.ticketmaster.com/discovery/v2/events.json?${params.toString()}`
     
     console.log(`🎫 Recherche concerts Ticketmaster (tous pays): ${artistName}`)
+    console.log(`   Dates: ${startDate.split('T')[0]} → ${endDate.split('T')[0]} (12 mois)`)
     console.log(`   URL: ${url.replace(apiKey, 'API_KEY')}`)
     
     const response = await fetch(url, {
@@ -222,7 +223,7 @@ export async function hasAnyConcerts(ticketmasterArtistId: string): Promise<numb
 
   try {
     const startDate = new Date().toISOString().split('T')[0] + 'T00:00:00Z'
-    const endDate = new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T23:59:59Z'
+    const endDate = new Date(Date.now() + 12 * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T23:59:59Z'
 
     const params = new URLSearchParams({
       apikey: apiKey,
