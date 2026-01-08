@@ -39,7 +39,8 @@ Pour obtenir le token :
 |----------|---------|----------|-------------|
 | `/api/user/profile` | GET | **P0** | Récupérer le profil |
 | `/api/user/profile` | PUT | **P0** | Mettre à jour le profil |
-| `/api/user/location` | PUT | P1 | Mettre à jour la localisation |
+| `/api/user/location` | PATCH | P1 | Mettre à jour la localisation |
+| `/api/user/location` | GET | P1 | Récupérer la localisation |
 | `/api/user/stats` | GET | P1 | Statistiques utilisateur |
 | `/api/user/events` | GET | P2 | Événements de l'utilisateur |
 | `/api/reset-user-data` | POST | Existant | Réinitialiser les données |
@@ -125,7 +126,50 @@ const response = await fetch('http://api.dibs.app/api/sync-spotify', {
 })
 ```
 
-### 3. Sélectionner des artistes
+### 3. Mettre à jour la localisation
+
+```typescript
+// 1. Mettre à jour la localisation (exemple complet)
+const response = await fetch('http://api.dibs.app/api/user/location', {
+  method: 'PATCH',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    city: 'Paris',
+    country: 'France',
+    lat: 48.8566,
+    lng: 2.3522,
+    radius_km: 50  // Rayon de notification en km (optionnel, défaut: 50)
+  })
+})
+const { data } = await response.json()
+// data: { city: 'Paris', country: 'France', radius_km: 50 }
+
+// 2. Mettre à jour la localisation (exemple minimal - seulement la ville)
+const response2 = await fetch('http://api.dibs.app/api/user/location', {
+  method: 'PATCH',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    city: 'Lyon'  // Seule la ville est obligatoire
+  })
+})
+
+// 3. Récupérer la localisation actuelle
+const response3 = await fetch('http://api.dibs.app/api/user/location', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+})
+const { data: location } = await response3.json()
+// location: { city: 'Paris', country: 'France', lat: 48.8566, lng: 2.3522, radius_km: 50 }
+```
+
+### 4. Sélectionner des artistes
 
 ```typescript
 // 1. Récupérer la liste des artistes disponibles (avec pagination)
@@ -149,7 +193,7 @@ await fetch('http://api.dibs.app/api/user/artists/save', {
 })
 ```
 
-### 4. Scanner un QR code
+### 5. Scanner un QR code
 
 ```typescript
 // Scanner un QR code
@@ -168,7 +212,7 @@ const { data } = await response.json()
 // data: { points_earned: 50, artist_name: "Taylor Swift", item_type: "album" }
 ```
 
-### 5. Voir le leaderboard d'un artiste
+### 6. Voir le leaderboard d'un artiste
 
 ```typescript
 const response = await fetch('http://api.dibs.app/api/artists/uuid-artist/leaderboard?limit=20', {

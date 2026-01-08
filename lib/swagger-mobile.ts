@@ -2610,10 +2610,10 @@ curl -X PUT https://dibs-poc0.vercel.app/api/user/profile \\
         }
       },
       '/api/user/location': {
-        put: {
+        patch: {
           tags: ['User'],
           summary: '📍 P1 - Mettre à jour la localisation',
-          description: 'Met à jour la localisation de l\'utilisateur.',
+          description: 'Met à jour la localisation de l\'utilisateur pour recevoir des notifications d\'événements à proximité.',
           'x-priority': 'P1',
           requestBody: {
             required: true,
@@ -2621,26 +2621,57 @@ curl -X PUT https://dibs-poc0.vercel.app/api/user/profile \\
               'application/json': {
                 schema: {
                   type: 'object',
-                  required: ['city', 'country'],
+                  required: ['city'],
                   properties: {
-                    city: { type: 'string', example: 'Paris' },
-                    country: { type: 'string', example: 'France' },
-                    location_lat: { type: 'number', example: 48.8566 },
-                    location_lng: { type: 'number', example: 2.3522 }
+                    city: { 
+                      type: 'string', 
+                      example: 'Paris',
+                      description: 'Ville de l\'utilisateur (obligatoire)'
+                    },
+                    country: { 
+                      type: 'string', 
+                      example: 'France',
+                      description: 'Pays de l\'utilisateur (optionnel)'
+                    },
+                    lat: { 
+                      type: 'number', 
+                      example: 48.8566,
+                      description: 'Latitude (optionnel)'
+                    },
+                    lng: { 
+                      type: 'number', 
+                      example: 2.3522,
+                      description: 'Longitude (optionnel)'
+                    },
+                    radius_km: {
+                      type: 'number',
+                      example: 50,
+                      description: 'Rayon de notification en km (optionnel, défaut: 50)'
+                    }
                   }
                 },
-                example: {
-                  city: 'Paris',
-                  country: 'France',
-                  location_lat: 48.8566,
-                  location_lng: 2.3522
+                examples: {
+                  'Exemple complet': {
+                    value: {
+                      city: 'Paris',
+                      country: 'France',
+                      lat: 48.8566,
+                      lng: 2.3522,
+                      radius_km: 50
+                    }
+                  },
+                  'Exemple minimal': {
+                    value: {
+                      city: 'Lyon'
+                    }
+                  }
                 }
               }
             }
           },
           responses: {
             200: {
-              description: 'Localisation mise à jour',
+              description: 'Localisation mise à jour avec succès',
               content: {
                 'application/json': {
                   schema: {
@@ -2650,9 +2681,88 @@ curl -X PUT https://dibs-poc0.vercel.app/api/user/profile \\
                       data: {
                         type: 'object',
                         properties: {
-                          message: { type: 'string', example: 'Location updated successfully' }
+                          city: { type: 'string', example: 'Paris' },
+                          country: { type: 'string', example: 'France' },
+                          radius_km: { type: 'number', example: 50 }
                         }
                       }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      city: 'Paris',
+                      country: 'France',
+                      radius_km: 50
+                    }
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Données invalides',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      error: { type: 'string', example: 'City is required' }
+                    }
+                  }
+                }
+              }
+            },
+            401: {
+              description: 'Non authentifié',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      error: { type: 'string', example: 'Invalid or expired token' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        get: {
+          tags: ['User'],
+          summary: '📍 P1 - Récupérer la localisation',
+          description: 'Récupère la localisation actuelle de l\'utilisateur.',
+          'x-priority': 'P1',
+          responses: {
+            200: {
+              description: 'Localisation récupérée avec succès',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          city: { type: 'string', example: 'Paris' },
+                          country: { type: 'string', example: 'France' },
+                          lat: { type: 'number', example: 48.8566 },
+                          lng: { type: 'number', example: 2.3522 },
+                          radius_km: { type: 'number', example: 50 }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      city: 'Paris',
+                      country: 'France',
+                      lat: 48.8566,
+                      lng: 2.3522,
+                      radius_km: 50
                     }
                   }
                 }
