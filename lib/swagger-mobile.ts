@@ -2683,6 +2683,8 @@ curl -X PUT https://dibs-poc0.vercel.app/api/user/profile \\
                         properties: {
                           city: { type: 'string', example: 'Paris' },
                           country: { type: 'string', example: 'France' },
+                          lat: { type: 'number', example: 48.8566 },
+                          lng: { type: 'number', example: 2.3522 },
                           radius_km: { type: 'number', example: 50 }
                         }
                       }
@@ -2693,6 +2695,8 @@ curl -X PUT https://dibs-poc0.vercel.app/api/user/profile \\
                     data: {
                       city: 'Paris',
                       country: 'France',
+                      lat: 48.8566,
+                      lng: 2.3522,
                       radius_km: 50
                     }
                   }

@@ -62,6 +62,8 @@ export async function PATCH(request: NextRequest) {
       data: {
         city,
         country,
+        lat,
+        lng,
         radius_km: radius_km || 50
       }
     })
