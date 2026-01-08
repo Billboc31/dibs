@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Mettre à jour la localisation de l'utilisateur
-    const { error: updateError } = await supabaseAdmin
+    const { data: updatedUser, error: updateError } = await supabaseAdmin
       .from('users')
       .update({
         location_city: city,
@@ -46,6 +46,8 @@ export async function PATCH(request: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq('id', user.id)
+      .select('location_city, location_country, location_lat, location_lng, notification_radius_km')
+      .single()
 
     if (updateError) {
       console.error('❌ Erreur mise à jour localisation:', updateError)
@@ -60,11 +62,11 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        city,
-        country,
-        lat,
-        lng,
-        radius_km: radius_km || 50
+        city: updatedUser.location_city,
+        country: updatedUser.location_country,
+        lat: updatedUser.location_lat,
+        lng: updatedUser.location_lng,
+        radius_km: updatedUser.notification_radius_km
       }
     })
 
