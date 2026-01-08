@@ -264,10 +264,22 @@ async function updateUserLocation() {
   if (status === 'granted') {
     const location = await Location.getCurrentPositionAsync({})
     
-    await supabase.from('users').update({
-      location_lat: location.coords.latitude,
-      location_lng: location.coords.longitude,
-    }).eq('id', user.id)
+    // Utiliser l'API endpoint (RECOMMANDÉ)
+    const { data: { session } } = await supabase.auth.getSession()
+    await fetch('https://api.dibs.app/api/user/location', {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${session?.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        city: 'Paris', // Obtenir via reverse geocoding
+        country: 'France',
+        lat: location.coords.latitude,
+        lng: location.coords.longitude,
+        radius_km: 50
+      })
+    })
   }
 }
 ```

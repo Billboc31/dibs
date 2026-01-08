@@ -80,7 +80,7 @@ Créer une API REST complète pour l'application mobile, séparée de la documen
 ### P1 - Important (8 endpoints)
 ✅ Features principales de l'app
 
-- `PUT /api/user/location` - Localisation
+- `PATCH /api/user/location` - Localisation
 - `GET /api/user/stats` - Statistiques
 - `GET /api/artists/:id` - Détails artiste
 - `GET /api/artists/:id/leaderboard` - Leaderboard

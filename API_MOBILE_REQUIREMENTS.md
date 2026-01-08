@@ -133,7 +133,7 @@ supabase.from('users').update({ city, country, ... })
 
 #### Endpoints nécessaires :
 ```
-PUT /api/user/location
+PATCH /api/user/location
 ```
 
 ---
@@ -149,7 +149,7 @@ PUT /api/user/location
 - ✅ `POST /api/reset-user-data` - **Existe**
 - 🆕 `GET /api/user/profile` - Récupérer le profil
 - 🆕 `PUT /api/user/profile` - Mettre à jour le profil
-- 🆕 `PUT /api/user/location` - Mettre à jour la localisation
+- 🆕 `PATCH /api/user/location` - Mettre à jour la localisation
 - 🆕 `GET /api/user/stats` - Statistiques utilisateur
 
 ### 🎤 **Artists**
