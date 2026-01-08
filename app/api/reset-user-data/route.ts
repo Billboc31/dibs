@@ -82,10 +82,11 @@ export async function POST(request: NextRequest) {
       .update({
         display_name: null,
         avatar_url: null,
-        city: null,
-        country: null,
+        location_city: null,
+        location_country: null,
         location_lat: null,
         location_lng: null,
+        notification_radius_km: 50,
         updated_at: new Date().toISOString()
       })
       .eq('id', userId)

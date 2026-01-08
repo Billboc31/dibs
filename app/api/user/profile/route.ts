@@ -80,16 +80,25 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { display_name, avatar_url, city, country } = body
 
+    // Construire l'objet d'update
+    const updateData: any = {
+      display_name,
+      avatar_url,
+      updated_at: new Date().toISOString()
+    }
+
+    // Si city ou country sont fournis, mettre à jour les colonnes location_*
+    if (city !== undefined) {
+      updateData.location_city = city
+    }
+    if (country !== undefined) {
+      updateData.location_country = country
+    }
+
     // Mettre à jour le profil
     const { data: updatedProfile, error: updateError } = await supabaseAdmin
       .from('users')
-      .update({
-        display_name,
-        avatar_url,
-        city,
-        country,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', user.id)
       .select()
       .single()

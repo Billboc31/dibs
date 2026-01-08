@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
           email: data.user.email,
           display_name: userProfile?.display_name || null,
           avatar_url: userProfile?.avatar_url || null,
-          city: userProfile?.city || null,
-          country: userProfile?.country || null,
+          city: userProfile?.location_city || null,
+          country: userProfile?.location_country || null,
           created_at: data.user.created_at
         },
         session: {
