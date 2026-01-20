@@ -82,3 +82,4 @@ WHERE table_name = 'notifications'
 ORDER BY ordinal_position;
 
 
+

@@ -16,3 +16,4 @@ WHERE table_name = 'notifications'
 ORDER BY column_name;
 
 
+
