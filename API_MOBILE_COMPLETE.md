@@ -54,6 +54,7 @@ Pour obtenir le token :
 | `/api/user/artists/top` | GET | **P0** | Top 3 artistes |
 | `/api/artists/:id` | GET | P1 | Détails d'un artiste |
 | `/api/artists/:id/leaderboard` | GET | P1 | Leaderboard d'un artiste |
+| `/api/artists/:id/followers` | GET | P1 | Followers d'un artiste (paginé) |
 | `/api/sync-spotify` | POST | Existant | Synchroniser Spotify |
 
 ### 🔗 Platforms (3 endpoints)
@@ -226,6 +227,20 @@ const { data: { artist, currentUser, leaderboard } } = await response.json()
 // leaderboard: [{ position: 1, display_name: "John", ... }, ...]
 ```
 
+### 7. Voir les followers d'un artiste (paginé)
+
+```typescript
+const response = await fetch('http://api.dibs.app/api/artists/uuid-artist/followers?page=0&limit=20', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+})
+
+const { data: { artist, followers, pagination } } = await response.json()
+// followers: [{ position: 1, display_name: "John", fanitude_points: 350, ... }, ...]
+// pagination: { page: 0, limit: 20, total: 125, hasMore: true }
+```
+
 ---
 
 ## 🏗️ Structure des fichiers créés
@@ -248,7 +263,8 @@ app/api/
 ├── artists/
 │   └── [id]/
 │       ├── route.ts ✅
-│       └── leaderboard/route.ts ✅
+│       ├── leaderboard/route.ts ✅
+│       └── followers/route.ts ✅
 ├── platforms/
 │   ├── route.ts ✅
 │   └── user/platforms/route.ts ✅ (GET + DELETE)
