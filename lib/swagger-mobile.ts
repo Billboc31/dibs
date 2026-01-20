@@ -3490,6 +3490,149 @@ curl -X POST https://dibs-poc0.vercel.app/api/user/artists/save \\
           }
         }
       },
+      '/api/artists/{id}/followers': {
+        get: {
+          tags: ['Artists'],
+          summary: '👥 P1 - Followers d\'un artiste (paginé)',
+          description: `Récupère la liste paginée des utilisateurs qui suivent un artiste, triée par score de fanitude décroissant.
+
+## 🔐 **AUTHENTIFICATION REQUISE : OUI** 
+✅ **Token Bearer obligatoire** - Ajoutez le header : \`Authorization: Bearer YOUR_JWT_TOKEN\`
+
+### 📝 Exemple avec Bearer token et pagination :
+\`\`\`javascript
+const authToken = await AsyncStorage.getItem('auth_token')
+const artistId = '550e8400-e29b-41d4-a716-446655440002'
+
+const response = await fetch(\`https://dibs-poc0.vercel.app/api/artists/\${artistId}/followers?page=0&limit=20\`, {
+  method: 'GET',
+  headers: {
+    'Authorization': \`Bearer \${authToken}\`,
+    'Content-Type': 'application/json'
+  }
+})
+
+const result = await response.json()
+if (response.ok) {
+  const { followers, pagination } = result.data
+  console.log(followers[0])
+  console.log(pagination)
+}
+\`\`\`
+
+### 🔧 cURL avec Bearer token :
+\`\`\`bash
+curl -X GET "https://dibs-poc0.vercel.app/api/artists/550e8400-e29b-41d4-a716-446655440002/followers?page=0&limit=20" \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  -H "Content-Type: application/json"
+\`\`\``,
+          'x-priority': 'P1',
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              description: 'ID de l\'artiste',
+              schema: { type: 'string', format: 'uuid' }
+            },
+            {
+              name: 'page',
+              in: 'query',
+              description: 'Numéro de page (commence à 0)',
+              required: false,
+              schema: { type: 'integer', default: 0, example: 0 }
+            },
+            {
+              name: 'limit',
+              in: 'query',
+              description: 'Nombre de followers par page',
+              required: false,
+              schema: { type: 'integer', default: 20, example: 20 }
+            }
+          ],
+          responses: {
+            200: {
+              description: 'Liste paginée des followers',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          artist: { $ref: '#/components/schemas/Artist' },
+                          followers: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                position: { type: 'integer', example: 1 },
+                                user_id: { type: 'string', format: 'uuid' },
+                                display_name: { type: 'string', example: 'John Doe' },
+                                avatar_url: { type: 'string', example: 'https://example.com/avatar.jpg' },
+                                country: { type: 'string', example: 'France' },
+                                fanitude_points: { type: 'integer', example: 1250 },
+                                last_listening_minutes: { type: 'integer', example: 350 }
+                              }
+                            }
+                          },
+                          pagination: {
+                            type: 'object',
+                            properties: {
+                              page: { type: 'integer', example: 0 },
+                              limit: { type: 'integer', example: 20 },
+                              total: { type: 'integer', example: 125 },
+                              hasMore: { type: 'boolean', example: true }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      artist: {
+                        id: '550e8400-e29b-41d4-a716-446655440002',
+                        name: 'Lady Gaga',
+                        image_url: 'https://example.com/ladygaga.jpg'
+                      },
+                      followers: [
+                        {
+                          position: 1,
+                          user_id: '550e8400-e29b-41d4-a716-446655440000',
+                          display_name: 'John Doe',
+                          avatar_url: 'https://example.com/avatar.jpg',
+                          country: 'France',
+                          fanitude_points: 1250,
+                          last_listening_minutes: 350
+                        },
+                        {
+                          position: 2,
+                          user_id: '550e8400-e29b-41d4-a716-446655440007',
+                          display_name: 'Jane Smith',
+                          avatar_url: 'https://example.com/avatar2.jpg',
+                          country: 'USA',
+                          fanitude_points: 980,
+                          last_listening_minutes: 210
+                        }
+                      ],
+                      pagination: {
+                        page: 0,
+                        limit: 20,
+                        total: 125,
+                        hasMore: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
 
       // === QR CODES ===
       '/api/qr/scan': {
