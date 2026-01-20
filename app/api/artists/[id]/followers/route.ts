@@ -68,7 +68,7 @@ export async function GET(
           display_name,
           email,
           avatar_url,
-          country
+          location_country
         )
       `, { count: 'exact' })
       .eq('artist_id', artistId)
@@ -89,7 +89,7 @@ export async function GET(
       user_id: item.user_id,
       display_name: item.users?.display_name || item.users?.email?.split('@')[0] || 'Anonymous',
       avatar_url: item.users?.avatar_url,
-      country: item.users?.country,
+      country: item.users?.location_country,
       fanitude_points: item.fanitude_points,
       last_listening_minutes: item.last_listening_minutes
     })) || []

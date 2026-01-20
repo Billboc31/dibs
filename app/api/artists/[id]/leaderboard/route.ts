@@ -59,7 +59,7 @@ export async function GET(
           display_name,
           email,
           avatar_url,
-          country
+          location_country
         )
       `)
       .eq('artist_id', artistId)
@@ -79,7 +79,7 @@ export async function GET(
       user_id: item.user_id,
       display_name: item.users?.display_name || item.users?.email?.split('@')[0] || 'Anonymous',
       avatar_url: item.users?.avatar_url,
-      country: item.users?.country,
+      country: item.users?.location_country,
       fanitude_points: item.fanitude_points,
       last_listening_minutes: item.last_listening_minutes
     })) || []
@@ -90,12 +90,12 @@ export async function GET(
 
     if (currentUserIndex !== undefined && currentUserIndex >= 0) {
       const userItem: any = allUserArtists[currentUserIndex]
-      const userCountry = userItem.users?.country
+    const userCountry = userItem.users?.location_country
 
       // Position dans le pays
       let countryPosition = 1
       if (userCountry) {
-        const usersInCountry = allUserArtists.filter((item: any) => item.users?.country === userCountry)
+        const usersInCountry = allUserArtists.filter((item: any) => item.users?.location_country === userCountry)
         countryPosition = usersInCountry.findIndex((item: any) => item.user_id === user.id) + 1
       }
 
