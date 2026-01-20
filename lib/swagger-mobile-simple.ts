@@ -690,6 +690,125 @@ const spec = {
       }
     },
 
+    '/api/artists/{id}/followers': {
+      get: {
+        tags: ['Artists'],
+        summary: '🏆 Followers d\'un artiste (paginé)',
+        'x-priority': 'P1',
+        'x-auth': true,
+        security: [{ BearerAuth: [] }],
+        description: 'Retourne la liste paginée des utilisateurs qui suivent un artiste, triée par score de fanitude décroissant.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'ID de l\'artiste',
+            example: '550e8400-e29b-41d4-a716-446655440002'
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', default: 0 },
+            description: 'Numéro de page (commence à 0)',
+            example: 0
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', default: 20, minimum: 1, maximum: 50 },
+            description: 'Nombre de followers par page (1-50)',
+            example: 20
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Liste paginée des followers',
+            content: {
+              'application/json': {
+                examples: {
+                  success: {
+                    summary: 'Followers triés par fanitude',
+                    value: {
+                      success: true,
+                      data: {
+                        artist: {
+                          id: '550e8400-e29b-41d4-a716-446655440002',
+                          name: 'Lady Gaga',
+                          image_url: 'https://example.com/ladygaga.jpg'
+                        },
+                        followers: [
+                          {
+                            position: 1,
+                            user_id: '550e8400-e29b-41d4-a716-446655440000',
+                            display_name: 'John Doe',
+                            avatar_url: 'https://example.com/avatar.jpg',
+                            country: 'France',
+                            fanitude_points: 1250,
+                            last_listening_minutes: 350
+                          },
+                          {
+                            position: 2,
+                            user_id: '550e8400-e29b-41d4-a716-446655440007',
+                            display_name: 'Jane Smith',
+                            avatar_url: 'https://example.com/avatar2.jpg',
+                            country: 'USA',
+                            fanitude_points: 980,
+                            last_listening_minutes: 210
+                          }
+                        ],
+                        pagination: {
+                          page: 0,
+                          limit: 20,
+                          total: 125,
+                          hasMore: true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: {
+            description: 'Non autorisé',
+            content: {
+              'application/json': {
+                examples: {
+                  unauthorized: {
+                    summary: 'Token manquant ou invalide',
+                    value: {
+                      success: false,
+                      error: 'Authorization header required'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          404: {
+            description: 'Artiste introuvable',
+            content: {
+              'application/json': {
+                examples: {
+                  not_found: {
+                    summary: 'Artiste introuvable',
+                    value: {
+                      success: false,
+                      error: 'Artist not found'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
     '/api/user/artists/sync': {
       post: {
         tags: ['Artists'],
