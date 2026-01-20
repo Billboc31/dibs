@@ -451,12 +451,25 @@ export default function ApiDocsMobilePage() {
 
     try {
       const baseUrl = spec?.servers?.[0]?.url || ''
-      let url = `${baseUrl}${endpoint.path}`
+      const paramsToUse = { ...(queryParams || {}) }
+      let resolvedPath = endpoint.path
+      
+      // Remplacer les paramètres de path si disponibles
+      if (resolvedPath.includes('{id}')) {
+        const pathId = paramsToUse.artistId || paramsToUse.id
+        if (pathId && pathId.trim() !== '') {
+          resolvedPath = resolvedPath.replace('{id}', pathId.trim())
+          delete paramsToUse.artistId
+          delete paramsToUse.id
+        }
+      }
+
+      let url = `${baseUrl}${resolvedPath}`
       
       // Ajouter les paramètres de query s'ils sont fournis
-      if (queryParams && Object.keys(queryParams).length > 0) {
+      if (paramsToUse && Object.keys(paramsToUse).length > 0) {
         const params = new URLSearchParams()
-        Object.entries(queryParams).forEach(([key, value]) => {
+        Object.entries(paramsToUse).forEach(([key, value]) => {
           if (value && value.trim() !== '') {
             params.append(key, value.trim())
           }
@@ -1111,7 +1124,8 @@ export default function ApiDocsMobilePage() {
 
                         {/* Paramètres de query pour différents endpoints */}
                         {((endpoint.path === '/api/user/artists' && endpoint.method === 'GET') || 
-                          (endpoint.path === '/api/user/platforms' && endpoint.method === 'DELETE')) && (
+                          (endpoint.path === '/api/user/platforms' && endpoint.method === 'DELETE') ||
+                          (endpoint.path === '/api/artists/{id}/followers' && endpoint.method === 'GET')) && (
                           <div className="space-y-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
                             {endpoint.path === '/api/user/artists' && endpoint.method === 'GET' && (
                               <>
@@ -1147,6 +1161,56 @@ export default function ApiDocsMobilePage() {
                                 </div>
                                 <div className="text-xs text-blue-600">
                                   💡 URL finale: <code>{spec?.servers?.[0]?.url || ''}{endpoint.path}?page={queryParams.page || '0'}&limit={queryParams.limit || '10'}</code>
+                                </div>
+                              </>
+                            )}
+
+                            {endpoint.path === '/api/artists/{id}/followers' && endpoint.method === 'GET' && (
+                              <>
+                                <div className="font-medium text-blue-800">🎤 Paramètres followers artiste</div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Artist ID
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={queryParams.artistId || ''}
+                                    onChange={(e) => setQueryParams(prev => ({ ...prev, artistId: e.target.value }))}
+                                    className="w-full px-3 py-2 border rounded-md text-sm"
+                                    placeholder="550e8400-e29b-41d4-a716-446655440002"
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Page (0, 1, 2...)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={queryParams.page || '0'}
+                                      onChange={(e) => setQueryParams(prev => ({ ...prev, page: e.target.value }))}
+                                      className="w-full px-3 py-2 border rounded-md text-sm"
+                                      placeholder="0"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Limite (1-50)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="50"
+                                      value={queryParams.limit || '20'}
+                                      onChange={(e) => setQueryParams(prev => ({ ...prev, limit: e.target.value }))}
+                                      className="w-full px-3 py-2 border rounded-md text-sm"
+                                      placeholder="20"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="text-xs text-blue-600">
+                                  💡 URL finale: <code>{spec?.servers?.[0]?.url || ''}/api/artists/{queryParams.artistId || 'ARTIST_ID'}/followers?page={queryParams.page || '0'}&limit={queryParams.limit || '20'}</code>
                                 </div>
                               </>
                             )}
