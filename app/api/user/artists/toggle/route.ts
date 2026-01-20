@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { artistsCache } from '@/lib/artists-cache'
 
 // Force dynamic rendering pour éviter les erreurs de build Vercel
 export const dynamic = 'force-dynamic'
@@ -49,7 +50,19 @@ export async function POST(request: NextRequest) {
     console.log(`🔄 Toggle ${artistsToToggle.length} artiste(s) pour l'utilisateur ${user.id}`)
 
     const results = []
-    const selectedArtistIds = []
+    const artistsNeedingSync = []
+    let updatedFromCacheCount = 0
+
+    // Utiliser le cache si disponible pour éviter un sync lent
+    const cachedData = artistsCache.getFullCache(user.id)
+    const cacheMap = new Map<string, number>()
+    if (cachedData && !cachedData.is_stale) {
+      cachedData.artists.forEach((artist: any) => {
+        if (artist?.id && typeof artist.fanitude_score === 'number') {
+          cacheMap.set(artist.id, artist.fanitude_score)
+        }
+      })
+    }
 
     for (const { artistId, selected } of artistsToToggle) {
       // Vérifier si l'artiste existe dans la table globale artists
@@ -101,7 +114,20 @@ export async function POST(request: NextRequest) {
           }
           
           console.log(`✅ Artiste ${artist.name} sélectionné`)
-          selectedArtistIds.push(artistId)
+
+          // Si le cache a déjà un score, on l'applique directement
+          const cachedScore = cacheMap.get(artistId)
+          if (cachedScore !== undefined) {
+            await supabaseAdmin
+              .from('user_artists')
+              .update({ fanitude_points: cachedScore })
+              .eq('user_id', user.id)
+              .eq('artist_id', artistId)
+
+            updatedFromCacheCount++
+          } else {
+            artistsNeedingSync.push(artistId)
+          }
         }
         
         results.push({
@@ -143,8 +169,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Déclencher le sync pour les artistes nouvellement sélectionnés
-    if (selectedArtistIds.length > 0) {
-      console.log(`🔄 Déclenchement du sync pour ${selectedArtistIds.length} nouveaux artistes...`)
+    if (artistsNeedingSync.length > 0) {
+      console.log(`🔄 Déclenchement du sync pour ${artistsNeedingSync.length} nouveaux artistes...`)
       
       try {
         // Appeler l'endpoint de sync
@@ -154,7 +180,7 @@ export async function POST(request: NextRequest) {
             'Authorization': authHeader,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ artistIds: selectedArtistIds })
+          body: JSON.stringify({ artistIds: artistsNeedingSync })
         })
         
         if (syncResponse.ok) {
@@ -183,7 +209,8 @@ export async function POST(request: NextRequest) {
         results,
         total_processed: artistsToToggle.length,
         total_selected: selectedCount || 0,
-        sync_triggered: selectedArtistIds.length > 0
+        sync_triggered: artistsNeedingSync.length > 0,
+        updated_from_cache: updatedFromCacheCount
       }
     })
 
